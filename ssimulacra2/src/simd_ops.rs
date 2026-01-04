@@ -5,11 +5,11 @@
 #[cfg(feature = "simd-ops")]
 use multiversion::multiversion;
 #[cfg(feature = "simd-ops")]
-use wide::f32x4;
+use wide::f32x16;
 
 /// SIMD-optimized SSIM map computation
 ///
-/// Processes 4 pixels at once using f32x4, then accumulates in f64 for precision
+/// Processes 16 pixels at once using f32x16, then accumulates in f64 for precision
 #[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
@@ -23,10 +23,10 @@ pub fn ssim_map_simd(
     s12: &[Vec<f32>; 3],
 ) -> [f64; 3 * 2] {
     const C2: f32 = 0.0009f32;
-    let c2_simd = f32x4::splat(C2);
-    let one_simd = f32x4::splat(1.0);
-    let two_simd = f32x4::splat(2.0);
-    let zero_simd = f32x4::ZERO;
+    let c2_simd = f32x16::splat(C2);
+    let one_simd = f32x16::splat(1.0);
+    let two_simd = f32x16::splat(2.0);
+    let zero_simd = f32x16::splat(0.0);
 
     let one_per_pixels = 1.0f64 / (width * height) as f64;
     let mut plane_averages = [0f64; 3 * 2];
@@ -43,14 +43,39 @@ pub fn ssim_map_simd(
         ) {
             let mut x = 0;
 
-            // Process 4 pixels at a time with SIMD
-            while x + 4 <= width {
-                // Load 4 pixels
-                let mu1 = f32x4::new([row_m1[x], row_m1[x + 1], row_m1[x + 2], row_m1[x + 3]]);
-                let mu2 = f32x4::new([row_m2[x], row_m2[x + 1], row_m2[x + 2], row_m2[x + 3]]);
-                let s11_vals = f32x4::new([row_s11[x], row_s11[x + 1], row_s11[x + 2], row_s11[x + 3]]);
-                let s22_vals = f32x4::new([row_s22[x], row_s22[x + 1], row_s22[x + 2], row_s22[x + 3]]);
-                let s12_vals = f32x4::new([row_s12[x], row_s12[x + 1], row_s12[x + 2], row_s12[x + 3]]);
+            // Process 16 pixels at a time with SIMD
+            while x + 16 <= width {
+                // Load 16 pixels
+                let mu1 = f32x16::new([
+                    row_m1[x], row_m1[x+1], row_m1[x+2], row_m1[x+3],
+                    row_m1[x+4], row_m1[x+5], row_m1[x+6], row_m1[x+7],
+                    row_m1[x+8], row_m1[x+9], row_m1[x+10], row_m1[x+11],
+                    row_m1[x+12], row_m1[x+13], row_m1[x+14], row_m1[x+15],
+                ]);
+                let mu2 = f32x16::new([
+                    row_m2[x], row_m2[x+1], row_m2[x+2], row_m2[x+3],
+                    row_m2[x+4], row_m2[x+5], row_m2[x+6], row_m2[x+7],
+                    row_m2[x+8], row_m2[x+9], row_m2[x+10], row_m2[x+11],
+                    row_m2[x+12], row_m2[x+13], row_m2[x+14], row_m2[x+15],
+                ]);
+                let s11_vals = f32x16::new([
+                    row_s11[x], row_s11[x+1], row_s11[x+2], row_s11[x+3],
+                    row_s11[x+4], row_s11[x+5], row_s11[x+6], row_s11[x+7],
+                    row_s11[x+8], row_s11[x+9], row_s11[x+10], row_s11[x+11],
+                    row_s11[x+12], row_s11[x+13], row_s11[x+14], row_s11[x+15],
+                ]);
+                let s22_vals = f32x16::new([
+                    row_s22[x], row_s22[x+1], row_s22[x+2], row_s22[x+3],
+                    row_s22[x+4], row_s22[x+5], row_s22[x+6], row_s22[x+7],
+                    row_s22[x+8], row_s22[x+9], row_s22[x+10], row_s22[x+11],
+                    row_s22[x+12], row_s22[x+13], row_s22[x+14], row_s22[x+15],
+                ]);
+                let s12_vals = f32x16::new([
+                    row_s12[x], row_s12[x+1], row_s12[x+2], row_s12[x+3],
+                    row_s12[x+4], row_s12[x+5], row_s12[x+6], row_s12[x+7],
+                    row_s12[x+8], row_s12[x+9], row_s12[x+10], row_s12[x+11],
+                    row_s12[x+12], row_s12[x+13], row_s12[x+14], row_s12[x+15],
+                ]);
 
                 // Compute intermediate values
                 let mu11 = mu1 * mu1;
@@ -75,13 +100,13 @@ pub fn ssim_map_simd(
 
                 // Extract values and accumulate in f64 for precision
                 let d_arr = d.to_array();
-                for i in 0..4 {
+                for i in 0..16 {
                     let d_f64 = f64::from(d_arr[i]);
                     sum1[0] += d_f64;
                     sum1[1] += d_f64.powi(4);
                 }
 
-                x += 4;
+                x += 16;
             }
 
             // Handle remaining pixels with scalar code
@@ -126,8 +151,8 @@ pub fn edge_diff_map_simd(
     let one_per_pixels = 1.0f64 / (width * height) as f64;
     let mut plane_averages = [0f64; 3 * 4];
 
-    let one_simd = f32x4::splat(1.0);
-    let zero_simd = f32x4::ZERO;
+    let one_simd = f32x16::splat(1.0);
+    let zero_simd = f32x16::splat(0.0);
 
     for c in 0..3 {
         let mut sum1 = [0.0f64; 4];
@@ -139,17 +164,39 @@ pub fn edge_diff_map_simd(
         ) {
             let mut x = 0;
 
-            // Process 4 pixels at once with SIMD
-            while x + 4 <= width {
+            // Process 16 pixels at once with SIMD
+            while x + 16 <= width {
                 // Load values
-                let r1 = f32x4::new([row1[x], row1[x + 1], row1[x + 2], row1[x + 3]]);
-                let r2 = f32x4::new([row2[x], row2[x + 1], row2[x + 2], row2[x + 3]]);
-                let rm1 = f32x4::new([rowm1[x], rowm1[x + 1], rowm1[x + 2], rowm1[x + 3]]);
-                let rm2 = f32x4::new([rowm2[x], rowm2[x + 1], rowm2[x + 2], rowm2[x + 3]]);
+                let r1 = f32x16::new([
+                    row1[x], row1[x+1], row1[x+2], row1[x+3],
+                    row1[x+4], row1[x+5], row1[x+6], row1[x+7],
+                    row1[x+8], row1[x+9], row1[x+10], row1[x+11],
+                    row1[x+12], row1[x+13], row1[x+14], row1[x+15],
+                ]);
+                let r2 = f32x16::new([
+                    row2[x], row2[x+1], row2[x+2], row2[x+3],
+                    row2[x+4], row2[x+5], row2[x+6], row2[x+7],
+                    row2[x+8], row2[x+9], row2[x+10], row2[x+11],
+                    row2[x+12], row2[x+13], row2[x+14], row2[x+15],
+                ]);
+                let rm1 = f32x16::new([
+                    rowm1[x], rowm1[x+1], rowm1[x+2], rowm1[x+3],
+                    rowm1[x+4], rowm1[x+5], rowm1[x+6], rowm1[x+7],
+                    rowm1[x+8], rowm1[x+9], rowm1[x+10], rowm1[x+11],
+                    rowm1[x+12], rowm1[x+13], rowm1[x+14], rowm1[x+15],
+                ]);
+                let rm2 = f32x16::new([
+                    rowm2[x], rowm2[x+1], rowm2[x+2], rowm2[x+3],
+                    rowm2[x+4], rowm2[x+5], rowm2[x+6], rowm2[x+7],
+                    rowm2[x+8], rowm2[x+9], rowm2[x+10], rowm2[x+11],
+                    rowm2[x+12], rowm2[x+13], rowm2[x+14], rowm2[x+15],
+                ]);
 
                 // d1 = (1 + |row2 - rowm2|) / (1 + |row1 - rowm1|) - 1
-                let diff1 = (r1 - rm1).abs();
-                let diff2 = (r2 - rm2).abs();
+                let d1_temp = r1 - rm1;
+                let diff1 = d1_temp.max(-d1_temp);  // abs() = max(x, -x)
+                let d2_temp = r2 - rm2;
+                let diff2 = d2_temp.max(-d2_temp);  // abs() = max(x, -x)
                 let d1 = (one_simd + diff2) / (one_simd + diff1) - one_simd;
 
                 // artifact = max(d1, 0)
@@ -162,7 +209,7 @@ pub fn edge_diff_map_simd(
                 let artifact_arr = artifact.to_array();
                 let detail_arr = detail_lost.to_array();
 
-                for i in 0..4 {
+                for i in 0..16 {
                     let a = f64::from(artifact_arr[i]);
                     let d = f64::from(detail_arr[i]);
                     sum1[0] += a;
@@ -171,7 +218,7 @@ pub fn edge_diff_map_simd(
                     sum1[3] += d.powi(4);
                 }
 
-                x += 4;
+                x += 16;
             }
 
             // Handle remaining pixels with scalar code
@@ -214,19 +261,28 @@ pub fn image_multiply_simd(
 
         let mut i = 0;
 
-        // Process 4 elements at a time
-        while i + 4 <= plane1.len() {
-            let p1 = f32x4::new([plane1[i], plane1[i + 1], plane1[i + 2], plane1[i + 3]]);
-            let p2 = f32x4::new([plane2[i], plane2[i + 1], plane2[i + 2], plane2[i + 3]]);
+        // Process 16 elements at a time
+        while i + 16 <= plane1.len() {
+            let p1 = f32x16::new([
+                plane1[i], plane1[i+1], plane1[i+2], plane1[i+3],
+                plane1[i+4], plane1[i+5], plane1[i+6], plane1[i+7],
+                plane1[i+8], plane1[i+9], plane1[i+10], plane1[i+11],
+                plane1[i+12], plane1[i+13], plane1[i+14], plane1[i+15],
+            ]);
+            let p2 = f32x16::new([
+                plane2[i], plane2[i+1], plane2[i+2], plane2[i+3],
+                plane2[i+4], plane2[i+5], plane2[i+6], plane2[i+7],
+                plane2[i+8], plane2[i+9], plane2[i+10], plane2[i+11],
+                plane2[i+12], plane2[i+13], plane2[i+14], plane2[i+15],
+            ]);
             let result = p1 * p2;
             let result_arr = result.to_array();
 
-            out_plane[i] = result_arr[0];
-            out_plane[i + 1] = result_arr[1];
-            out_plane[i + 2] = result_arr[2];
-            out_plane[i + 3] = result_arr[3];
+            for j in 0..16 {
+                out_plane[i + j] = result_arr[j];
+            }
 
-            i += 4;
+            i += 16;
         }
 
         // Handle remaining elements
@@ -248,30 +304,17 @@ pub fn xyb_to_planar_simd(data: &[[f32; 3]], width: usize, height: usize) -> [Ve
 
     let mut i = 0;
 
-    // Process 4 pixels at once
-    while i + 4 <= len {
-        // Deinterleave 4 pixels directly - safe version (compiler should elide bounds checks)
-        let p0 = data[i];
-        let p1 = data[i + 1];
-        let p2 = data[i + 2];
-        let p3 = data[i + 3];
+    // Process 16 pixels at once
+    while i + 16 <= len {
+        // Deinterleave 16 pixels directly - safe version (compiler should elide bounds checks)
+        for j in 0..16 {
+            let p = data[i + j];
+            out0[i + j] = p[0];
+            out1[i + j] = p[1];
+            out2[i + j] = p[2];
+        }
 
-        out0[i] = p0[0];
-        out0[i + 1] = p1[0];
-        out0[i + 2] = p2[0];
-        out0[i + 3] = p3[0];
-
-        out1[i] = p0[1];
-        out1[i + 1] = p1[1];
-        out1[i + 2] = p2[1];
-        out1[i + 3] = p3[1];
-
-        out2[i] = p0[2];
-        out2[i + 1] = p1[2];
-        out2[i + 2] = p2[2];
-        out2[i + 3] = p3[2];
-
-        i += 4;
+        i += 16;
     }
 
     // Handle remainder
