@@ -126,7 +126,7 @@ where
 }
 
 /// Convert LinearRgb to Xyb using SIMD optimizations
-fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
+pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
     let width = linear_rgb.width();
     let height = linear_rgb.height();
     // Take ownership of the data and convert in-place (no clone!)

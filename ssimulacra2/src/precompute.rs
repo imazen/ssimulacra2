@@ -37,8 +37,8 @@
 
 use crate::blur::Blur;
 use crate::{
-    downscale_by_2, edge_diff_map, image_multiply, make_positive_xyb, ssim_map, xyb_to_planar,
-    LinearRgb, Msssim, MsssimScale, Ssimulacra2Error, Xyb, NUM_SCALES,
+    downscale_by_2, edge_diff_map, image_multiply, linear_rgb_to_xyb_simd, make_positive_xyb,
+    ssim_map, xyb_to_planar, LinearRgb, Msssim, MsssimScale, Ssimulacra2Error, NUM_SCALES,
 };
 
 /// Precomputed reference data for a single scale.
@@ -114,7 +114,7 @@ impl Ssim2Reference {
             }
             blur.shrink_to(width, height);
 
-            let mut img1_xyb = Xyb::from(img1.clone());
+            let mut img1_xyb = linear_rgb_to_xyb_simd(img1.clone());
             make_positive_xyb(&mut img1_xyb);
 
             let img1_planar = xyb_to_planar(&img1_xyb);
@@ -187,7 +187,7 @@ impl Ssim2Reference {
             }
             blur.shrink_to(width, height);
 
-            let mut img2_xyb = Xyb::from(img2.clone());
+            let mut img2_xyb = linear_rgb_to_xyb_simd(img2.clone());
             make_positive_xyb(&mut img2_xyb);
 
             let img2_planar = xyb_to_planar(&img2_xyb);
@@ -308,7 +308,7 @@ mod tests {
         let precomputed = Ssim2Reference::new(source).unwrap();
         let precomputed_score = precomputed.compare(distorted).unwrap();
 
-        // Scores should match exactly
+        // Scores should match exactly (both use same SIMD XYB path)
         assert!(
             (full_score - precomputed_score).abs() < 1e-6,
             "Scores don't match: full={}, precomputed={}",
