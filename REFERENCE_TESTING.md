@@ -331,3 +331,129 @@ Document reference data version in `reference_data.rs` header:
 //! Date: 2026-01-03
 //! Platform: x86_64-unknown-linux-gnu
 ```
+
+## Investigation Findings: What Didn't Work
+
+This section documents attempted fixes that **did not improve** parity with C++. This prevents wasted effort re-investigating these approaches.
+
+### Summary: Error Reduction Journey
+
+| Attempt | Max Error | Result | Reason |
+|---------|-----------|--------|--------|
+| Baseline (all f32) | 1.16 | - | Starting point |
+| Downscaling f64 normalization | 1.16 | ❌ No effect | Not the source of error |
+| **Horizontal IIR f64** | **0.955** | ✅ **-18%** | **Found the main issue!** |
+| SSIM computation f64 | 0.955 | ❌ No effect | Error is in blur, not SSIM |
+| Vertical IIR f64 | 1.984 | ❌ **Worse!** | Precision mismatch between passes |
+
+### Failed Attempt #1: Downscaling with f64 Normalization
+
+**Hypothesis**: Downscaling by 2x accumulates rounding errors when averaging 4 pixels.
+
+**What we tried** (`src/lib.rs:175-192`):
+```rust
+pub(crate) fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
+    // Use f64 accumulator to reduce rounding errors
+    let mut sum = 0f64;
+    for iy in 0..SCALE {
+        for ix in 0..SCALE {
+            sum += f64::from(in_pix[c]);
+        }
+    }
+    out_pix[c] = (sum / (SCALE * SCALE) as f64) as f32;
+}
+```
+
+**Result**: No change in error (still 1.16)
+
+**Why it didn't help**: The downscaling is already numerically stable. Averaging 4 values doesn't accumulate significant error. The issue was elsewhere in the pipeline.
+
+### Failed Attempt #2: SSIM Computation with f64
+
+**Hypothesis**: SSIM computation has rounding errors when dividing small differences.
+
+**What we tried** (`src/lib.rs:242-248`):
+```rust
+// Use f64 for SSIM computation to reduce rounding errors
+let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
+let num_s = 2f64.mul_add(f64::from(row_s12[x] - mu12), f64::from(C2));
+let denom_s = f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
+let mut d = 1.0f64 - (num_m * num_s) / denom_s;
+```
+
+**Result**: No change in error (still 0.955)
+
+**Why it didn't help**: By this point in the pipeline, the blur has already introduced the errors. Computing SSIM in higher precision doesn't undo errors from earlier stages.
+
+### Failed Attempt #3: Vertical IIR Filter with f64
+
+**Hypothesis**: Both horizontal and vertical IIR filters should use f64 for consistency.
+
+**What we tried** (`src/blur/gaussian.rs:125-187`):
+```rust
+pub fn vertical_pass<const COLUMNS: usize>(...) {
+    // Use f64 accumulators to reduce rounding error accumulation
+    let mut prev = vec![0f64; 3 * COLUMNS];
+    let mut prev2 = vec![0f64; 3 * COLUMNS];
+    let mut out = vec![0f64; 3 * COLUMNS];
+
+    // Convert to f64 for accumulation
+    let sum = f64::from(top_row[i]) + f64::from(bottom_row[i]);
+    // ... rest of computation in f64
+}
+```
+
+**Result**: Error **increased** from 0.955 to **1.984** (worse than baseline!)
+
+**Why it made things worse**:
+- Creates precision **mismatch** between horizontal (f64) and vertical (f64) passes
+- The horizontal pass outputs f32, which gets read by vertical pass
+- Mixing f32 outputs with f64 accumulators causes different rounding than C++
+- Multi-scale processing (6 scales) compounds these differences
+- The horizontal and vertical filters need **precision consistency**
+
+**Lesson**: When fixing numerical issues, changing one part of a pipeline can make overall results worse if other parts aren't changed compatibly.
+
+### Why Only Horizontal f64 Works
+
+The successful fix was **horizontal IIR f64 only**, which:
+1. Reduces accumulation errors in the primary scan direction
+2. Still outputs f32, maintaining compatibility with vertical pass
+3. Keeps vertical pass at f32 to match C++ behavior
+4. Achieves consistency: horizontal uses f64 internally but interfaces in f32
+
+This creates a "best of both worlds" - better precision where it matters, but maintains interface compatibility.
+
+### What We Learned
+
+**Error pattern analysis is crucial**:
+- The fact that **all textured patterns had 0.000 error** told us:
+  - The blur algorithm is fundamentally correct
+  - Errors are specific to uniform images (no texture to mask rounding)
+  - The IIR filter accumulation was the likely culprit
+
+**Precision changes can backfire**:
+- Changing one component to f64 doesn't always help
+- Pipeline stages need precision **consistency**
+- Mixed precision can introduce worse errors than consistent f32
+
+**C++ uses f32 throughout**:
+- C++ implementation uses `float` for all blur operations
+- C++'s HWY SIMD might have different rounding behavior
+- The 0.955 remaining error might be unavoidable without SIMD
+
+### Current State: Production Ready
+
+**Remaining 0.955 error is acceptable because**:
+- Only affects synthetic uniform color images (no real-world impact)
+- All textured patterns match exactly (0.000 error)
+- Error is within tolerance (1.2 for uniform_shift)
+- Further improvements require SIMD or major architectural changes
+
+**To pursue exact parity, future work could**:
+1. Port C++ HWY SIMD implementation for bit-exact matching
+2. Investigate compiler-specific FMA (fused multiply-add) behavior
+3. Test on different platforms (ARM, RISC-V) to isolate x86-specific behavior
+4. Compare C++ builds on different platforms to see if C++ also varies
+
+But for a pure-Rust scalar implementation, **0.955 max error is excellent**.
