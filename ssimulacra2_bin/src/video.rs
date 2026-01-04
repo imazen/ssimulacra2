@@ -390,19 +390,15 @@ fn compare_videos_inner<D: Decoder + 'static, E: Decoder + 'static>(
     let dst_bd = dst_config.bit_depth;
 
     let current_frame = 0usize;
-    let end_frame = frames_to_compare
-        .map(|frames_to_compare| skip_frames + (frames_to_compare * inc));
+    let end_frame =
+        frames_to_compare.map(|frames_to_compare| skip_frames + (frames_to_compare * inc));
 
-    let video_compare = Arc::new(
-        Mutex::new(
-            VideoCompare {
-                current_frame,
-                next_frame: skip_frames,
-                source,
-                distorted,
-            }
-        )
-    );
+    let video_compare = Arc::new(Mutex::new(VideoCompare {
+        current_frame,
+        next_frame: skip_frames,
+        source,
+        distorted,
+    }));
 
     for _ in 0..frame_threads {
         let video_compare = Arc::clone(&video_compare);
@@ -461,7 +457,8 @@ fn compare_videos_inner<D: Decoder + 'static, E: Decoder + 'static>(
     let progress = if stderr().is_tty() && !verbose {
         let frame_count = source_frame_count.or(distorted_frame_count);
         let pb = if let Some(frame_count) = frame_count {
-            let fc = frames_to_compare.unwrap_or(frame_count - skip_frames)
+            let fc = frames_to_compare
+                .unwrap_or(frame_count - skip_frames)
                 .min(((frame_count - skip_frames) as f64 / inc as f64).ceil() as usize);
 
             ProgressBar::new(fc as u64)

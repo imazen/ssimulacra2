@@ -28,6 +28,10 @@ pub enum Ssimulacra2Error {
     /// This is not currently supported by the SSIMULACRA2 metric.
     #[error("Images must be at least 8x8 pixels")]
     InvalidImageSize,
+
+    /// Gaussian blur operation failed (libblur backend).
+    #[error("Gaussian blur operation failed")]
+    GaussianBlurError,
 }
 
 /// Computes the SSIMULACRA2 score for a given input frame and the distorted
@@ -242,7 +246,8 @@ pub(crate) fn ssim_map(
                 // Use f64 for SSIM computation to reduce rounding errors in uniform images
                 let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
                 let num_s = 2f64.mul_add(f64::from(row_s12[x] - mu12), f64::from(C2));
-                let denom_s = f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
+                let denom_s =
+                    f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
                 // Use 1 - SSIM' so it becomes an error score instead of a quality
                 // index. This makes it make sense to compute an L_4 norm.
                 let mut d = 1.0f64 - (num_m * num_s) / denom_s;

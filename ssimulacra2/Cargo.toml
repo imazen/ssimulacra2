@@ -13,6 +13,7 @@ license = "BSD-2-Clause"
 rust-version = "1.65.0"
 
 [dependencies]
+libblur = { version = "0.17", optional = true }
 num-traits = "0.2.15"
 rayon = { version = "1.5.3", optional = true }
 thiserror = "2.0.9"
@@ -31,7 +32,10 @@ which = "7.0"
 sha2 = "0.10"
 
 [features]
-default = ["rayon"]
+default = ["rayon", "blur-transpose"]
+blur-accurate = []  # Baseline: f64 IIR (slower, 0.955 max error vs C++)
+blur-transpose = []  # Default: f32 IIR transpose (~4x faster, 0.926 max error)
+blur-libblur = ["libblur"]  # NOT RECOMMENDED: incompatible algorithm (1000x error)
 
 [[bench]]
 name = "benches"

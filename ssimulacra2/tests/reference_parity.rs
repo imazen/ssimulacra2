@@ -128,9 +128,17 @@ fn gen_edge(width: usize, height: usize, vertical: bool) -> Vec<u8> {
     for y in 0..height {
         for x in 0..width {
             let val = if vertical {
-                if x < width / 2 { 0 } else { 255 }
+                if x < width / 2 {
+                    0
+                } else {
+                    255
+                }
             } else {
-                if y < height / 2 { 0 } else { 255 }
+                if y < height / 2 {
+                    0
+                } else {
+                    255
+                }
             };
             data.extend_from_slice(&[val, val, val]);
         }
@@ -250,7 +258,11 @@ fn generate_test_image(case: &ReferenceCase) -> (Vec<u8>, Vec<u8>) {
         let data = gen_uniform(width, height, 128, 128, 128);
         (data.clone(), data)
     } else if let Some(shift_str) = name.strip_prefix("uniform_shift_") {
-        if let Some(shift) = shift_str.split('_').next().and_then(|s| s.parse::<u8>().ok()) {
+        if let Some(shift) = shift_str
+            .split('_')
+            .next()
+            .and_then(|s| s.parse::<u8>().ok())
+        {
             let source = gen_uniform(width, height, 128, 128, 128);
             let distorted = gen_uniform(width, height, 128 + shift, 128 + shift, 128 + shift);
             (source, distorted)
@@ -323,7 +335,9 @@ fn generate_test_image(case: &ReferenceCase) -> (Vec<u8>, Vec<u8>) {
 fn test_reference_parity() {
     if REFERENCE_CASES.is_empty() {
         eprintln!("WARNING: No reference cases loaded!");
-        eprintln!("Run: SSIMULACRA2_BIN=/path/to/ssimulacra2 cargo run --example capture_cpp_reference");
+        eprintln!(
+            "Run: SSIMULACRA2_BIN=/path/to/ssimulacra2 cargo run --example capture_cpp_reference"
+        );
         return;
     }
 
@@ -356,12 +370,24 @@ fn test_reference_parity() {
         // Convert to RGB format
         let source_rgb: Vec<[f32; 3]> = source_data
             .chunks_exact(3)
-            .map(|c| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0])
+            .map(|c| {
+                [
+                    c[0] as f32 / 255.0,
+                    c[1] as f32 / 255.0,
+                    c[2] as f32 / 255.0,
+                ]
+            })
             .collect();
 
         let distorted_rgb: Vec<[f32; 3]> = distorted_data
             .chunks_exact(3)
-            .map(|c| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0])
+            .map(|c| {
+                [
+                    c[0] as f32 / 255.0,
+                    c[1] as f32 / 255.0,
+                    c[2] as f32 / 255.0,
+                ]
+            })
             .collect();
 
         let source = Rgb::new(
@@ -414,8 +440,15 @@ fn test_reference_parity() {
     }
 
     if !failures.is_empty() {
-        eprintln!("\n{} / {} tests FAILED:", failures.len(), REFERENCE_CASES.len());
-        eprintln!("{:<5} {:<50} {:>15} {:>15} {:>10}", "Index", "Name", "Expected", "Actual", "Error");
+        eprintln!(
+            "\n{} / {} tests FAILED:",
+            failures.len(),
+            REFERENCE_CASES.len()
+        );
+        eprintln!(
+            "{:<5} {:<50} {:>15} {:>15} {:>10}",
+            "Index", "Name", "Expected", "Actual", "Error"
+        );
         eprintln!("{:-<100}", "");
         for (i, name, expected, actual, error) in &failures {
             eprintln!(
@@ -436,58 +469,79 @@ fn test_reference_parity() {
         error: f64,
     }
 
-    let all_errors: Vec<ErrorCase> = REFERENCE_CASES.iter().map(|case| {
-        let (source_data, distorted_data) = generate_test_image(case);
-        let source_rgb: Vec<[f32; 3]> = source_data
-            .chunks_exact(3)
-            .map(|c| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0])
-            .collect();
-        let distorted_rgb: Vec<[f32; 3]> = distorted_data
-            .chunks_exact(3)
-            .map(|c| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0])
-            .collect();
-        let source = Rgb::new(
-            source_rgb,
-            case.width,
-            case.height,
-            TransferCharacteristic::SRGB,
-            ColorPrimaries::BT709,
-        )
-        .unwrap();
-        let distorted = Rgb::new(
-            distorted_rgb,
-            case.width,
-            case.height,
-            TransferCharacteristic::SRGB,
-            ColorPrimaries::BT709,
-        )
-        .unwrap();
-        let score = compute_frame_ssimulacra2(source, distorted).unwrap();
-        ErrorCase {
-            name: case.name,
-            expected: case.expected_score,
-            actual: score,
-            error: (score - case.expected_score).abs(),
-        }
-    }).collect();
+    let all_errors: Vec<ErrorCase> = REFERENCE_CASES
+        .iter()
+        .map(|case| {
+            let (source_data, distorted_data) = generate_test_image(case);
+            let source_rgb: Vec<[f32; 3]> = source_data
+                .chunks_exact(3)
+                .map(|c| {
+                    [
+                        c[0] as f32 / 255.0,
+                        c[1] as f32 / 255.0,
+                        c[2] as f32 / 255.0,
+                    ]
+                })
+                .collect();
+            let distorted_rgb: Vec<[f32; 3]> = distorted_data
+                .chunks_exact(3)
+                .map(|c| {
+                    [
+                        c[0] as f32 / 255.0,
+                        c[1] as f32 / 255.0,
+                        c[2] as f32 / 255.0,
+                    ]
+                })
+                .collect();
+            let source = Rgb::new(
+                source_rgb,
+                case.width,
+                case.height,
+                TransferCharacteristic::SRGB,
+                ColorPrimaries::BT709,
+            )
+            .unwrap();
+            let distorted = Rgb::new(
+                distorted_rgb,
+                case.width,
+                case.height,
+                TransferCharacteristic::SRGB,
+                ColorPrimaries::BT709,
+            )
+            .unwrap();
+            let score = compute_frame_ssimulacra2(source, distorted).unwrap();
+            ErrorCase {
+                name: case.name,
+                expected: case.expected_score,
+                actual: score,
+                error: (score - case.expected_score).abs(),
+            }
+        })
+        .collect();
 
     // Sort by error descending for reporting
     let mut sorted_errors = all_errors.clone();
     sorted_errors.sort_by(|a, b| b.error.partial_cmp(&a.error).unwrap());
 
     println!("\n{:=^100}", " REFERENCE PARITY TEST RESULTS ");
-    println!("All {} reference tests passed! Max error: {:.6}", REFERENCE_CASES.len(), max_error);
+    println!(
+        "All {} reference tests passed! Max error: {:.6}",
+        REFERENCE_CASES.len(),
+        max_error
+    );
 
     // Error percentiles
     let mut error_values: Vec<f64> = all_errors.iter().map(|e| e.error).collect();
     error_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    println!("\nError percentiles: p50={:.4}, p90={:.4}, p95={:.4}, p99={:.4}",
+    println!(
+        "\nError percentiles: p50={:.4}, p90={:.4}, p95={:.4}, p99={:.4}",
         error_values[error_values.len() / 2],
         error_values[(error_values.len() * 90) / 100],
         error_values[(error_values.len() * 95) / 100],
         error_values[(error_values.len() * 99) / 100]
     );
-    println!("Errors >0.1: {}, >0.5: {}, >1.0: {}",
+    println!(
+        "Errors >0.1: {}, >0.5: {}, >1.0: {}",
         error_values.iter().filter(|&&e| e > 0.1).count(),
         error_values.iter().filter(|&&e| e > 0.5).count(),
         error_values.iter().filter(|&&e| e > 1.0).count()
@@ -495,20 +549,30 @@ fn test_reference_parity() {
 
     // Top 10 errors
     println!("\n{:-^100}", " Top 10 Largest Errors ");
-    println!("{:<50} {:>15} {:>15} {:>10}", "Test Case", "Expected", "Actual", "Error");
+    println!(
+        "{:<50} {:>15} {:>15} {:>10}",
+        "Test Case", "Expected", "Actual", "Error"
+    );
     println!("{:-<100}", "");
     for case in sorted_errors.iter().take(10) {
-        println!("{:<50} {:>15.6} {:>15.6} {:>10.6}", case.name, case.expected, case.actual, case.error);
+        println!(
+            "{:<50} {:>15.6} {:>15.6} {:>10.6}",
+            case.name, case.expected, case.actual, case.error
+        );
     }
 
     // Error breakdown by pattern type
     println!("\n{:-^100}", " Error Breakdown by Pattern Type ");
 
-    let mut pattern_errors: std::collections::HashMap<&str, Vec<f64>> = std::collections::HashMap::new();
+    let mut pattern_errors: std::collections::HashMap<&str, Vec<f64>> =
+        std::collections::HashMap::new();
     for case in &all_errors {
         let pattern = if case.name.contains("uniform_shift") {
             "uniform_shift"
-        } else if case.name.contains("boxblur8x8") || case.name.contains("sharpen") || case.name.contains("yuv_roundtrip") {
+        } else if case.name.contains("boxblur8x8")
+            || case.name.contains("sharpen")
+            || case.name.contains("yuv_roundtrip")
+        {
             "distortions"
         } else if case.name.contains("_vs_") {
             "synthetic_vs"
@@ -525,10 +589,16 @@ fn test_reference_parity() {
         } else {
             "other"
         };
-        pattern_errors.entry(pattern).or_insert_with(Vec::new).push(case.error);
+        pattern_errors
+            .entry(pattern)
+            .or_insert_with(Vec::new)
+            .push(case.error);
     }
 
-    println!("{:<20} {:>10} {:>15} {:>15} {:>15}", "Pattern", "Count", "Max Error", "Mean Error", "P95 Error");
+    println!(
+        "{:<20} {:>10} {:>15} {:>15} {:>15}",
+        "Pattern", "Count", "Max Error", "Mean Error", "P95 Error"
+    );
     println!("{:-<80}", "");
     let mut pattern_names: Vec<_> = pattern_errors.keys().copied().collect();
     pattern_names.sort();
@@ -538,8 +608,14 @@ fn test_reference_parity() {
             let max = errors.iter().copied().fold(f64::NEG_INFINITY, f64::max);
             let mean = errors.iter().sum::<f64>() / errors.len() as f64;
             let p95 = errors[(errors.len() * 95) / 100];
-            println!("{:<20} {:>10} {:>15.6} {:>15.6} {:>15.6}",
-                pattern, errors.len(), max, mean, p95);
+            println!(
+                "{:<20} {:>10} {:>15.6} {:>15.6} {:>15.6}",
+                pattern,
+                errors.len(),
+                max,
+                mean,
+                p95
+            );
         }
     }
     println!("{:=^100}", "");
