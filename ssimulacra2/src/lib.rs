@@ -132,8 +132,7 @@ pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
     // Take ownership of the data and convert in-place (no clone!)
     let mut data = linear_rgb.into_data();
     xyb_simd::linear_rgb_to_xyb_simd(&mut data);
-    Xyb::new(data, width, height)
-        .expect("XYB construction should not fail with correct dimensions")
+    Xyb::new(data, width, height).expect("XYB construction should not fail with correct dimensions")
 }
 
 // Get all components in more or less 0..1 range
@@ -248,56 +247,56 @@ pub(crate) fn ssim_map(
 
     #[cfg(not(feature = "simd-ops"))]
     {
-    const C2: f32 = 0.0009f32;
+        const C2: f32 = 0.0009f32;
 
-    let one_per_pixels = 1.0f64 / (width * height) as f64;
-    let mut plane_averages = [0f64; 3 * 2];
+        let one_per_pixels = 1.0f64 / (width * height) as f64;
+        let mut plane_averages = [0f64; 3 * 2];
 
-    for c in 0..3 {
-        let mut sum1 = [0.0f64; 2];
-        for (row_m1, (row_m2, (row_s11, (row_s22, row_s12)))) in m1[c].chunks_exact(width).zip(
-            m2[c].chunks_exact(width).zip(
-                s11[c]
-                    .chunks_exact(width)
-                    .zip(s22[c].chunks_exact(width).zip(s12[c].chunks_exact(width))),
-            ),
-        ) {
-            for x in 0..width {
-                let mu1 = row_m1[x];
-                let mu2 = row_m2[x];
-                let mu11 = mu1 * mu1;
-                let mu22 = mu2 * mu2;
-                let mu12 = mu1 * mu2;
-                let mu_diff = mu1 - mu2;
+        for c in 0..3 {
+            let mut sum1 = [0.0f64; 2];
+            for (row_m1, (row_m2, (row_s11, (row_s22, row_s12)))) in m1[c].chunks_exact(width).zip(
+                m2[c].chunks_exact(width).zip(
+                    s11[c]
+                        .chunks_exact(width)
+                        .zip(s22[c].chunks_exact(width).zip(s12[c].chunks_exact(width))),
+                ),
+            ) {
+                for x in 0..width {
+                    let mu1 = row_m1[x];
+                    let mu2 = row_m2[x];
+                    let mu11 = mu1 * mu1;
+                    let mu22 = mu2 * mu2;
+                    let mu12 = mu1 * mu2;
+                    let mu_diff = mu1 - mu2;
 
-                // Correction applied compared to the original SSIM formula, which has:
-                //   luma_err = 2 * mu1 * mu2 / (mu1^2 + mu2^2)
-                //            = 1 - (mu1 - mu2)^2 / (mu1^2 + mu2^2)
-                // The denominator causes error in the darks (low mu1 and mu2) to weigh
-                // more than error in the brights (high mu1 and mu2). This would make
-                // sense if values correspond to linear luma. However, the actual values
-                // are either gamma-compressed luma (which supposedly is already
-                // perceptually uniform) or chroma (where weighing green more than red
-                // or blue more than yellow does not make any sense at all). So it is
-                // better to simply drop this denominator.
-                // Use f64 for SSIM computation to reduce rounding errors in uniform images
-                let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
-                let num_s = 2f64.mul_add(f64::from(row_s12[x] - mu12), f64::from(C2));
-                let denom_s =
-                    f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
-                // Use 1 - SSIM' so it becomes an error score instead of a quality
-                // index. This makes it make sense to compute an L_4 norm.
-                let mut d = 1.0f64 - (num_m * num_s) / denom_s;
-                d = d.max(0.0);
-                sum1[0] += d;
-                sum1[1] += d.powi(4);
+                    // Correction applied compared to the original SSIM formula, which has:
+                    //   luma_err = 2 * mu1 * mu2 / (mu1^2 + mu2^2)
+                    //            = 1 - (mu1 - mu2)^2 / (mu1^2 + mu2^2)
+                    // The denominator causes error in the darks (low mu1 and mu2) to weigh
+                    // more than error in the brights (high mu1 and mu2). This would make
+                    // sense if values correspond to linear luma. However, the actual values
+                    // are either gamma-compressed luma (which supposedly is already
+                    // perceptually uniform) or chroma (where weighing green more than red
+                    // or blue more than yellow does not make any sense at all). So it is
+                    // better to simply drop this denominator.
+                    // Use f64 for SSIM computation to reduce rounding errors in uniform images
+                    let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
+                    let num_s = 2f64.mul_add(f64::from(row_s12[x] - mu12), f64::from(C2));
+                    let denom_s =
+                        f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
+                    // Use 1 - SSIM' so it becomes an error score instead of a quality
+                    // index. This makes it make sense to compute an L_4 norm.
+                    let mut d = 1.0f64 - (num_m * num_s) / denom_s;
+                    d = d.max(0.0);
+                    sum1[0] += d;
+                    sum1[1] += d.powi(4);
+                }
             }
+            plane_averages[c * 2] = one_per_pixels * sum1[0];
+            plane_averages[c * 2 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
         }
-        plane_averages[c * 2] = one_per_pixels * sum1[0];
-        plane_averages[c * 2 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
-    }
 
-    plane_averages
+        plane_averages
     }
 }
 
@@ -316,41 +315,41 @@ pub(crate) fn edge_diff_map(
 
     #[cfg(not(feature = "simd-ops"))]
     {
-    let one_per_pixels = 1.0f64 / (width * height) as f64;
-    let mut plane_averages = [0f64; 3 * 4];
+        let one_per_pixels = 1.0f64 / (width * height) as f64;
+        let mut plane_averages = [0f64; 3 * 4];
 
-    for c in 0..3 {
-        let mut sum1 = [0.0f64; 4];
-        for (row1, (row2, (rowm1, rowm2))) in img1[c].chunks_exact(width).zip(
-            img2[c]
-                .chunks_exact(width)
-                .zip(mu1[c].chunks_exact(width).zip(mu2[c].chunks_exact(width))),
-        ) {
-            for x in 0..width {
-                let d1: f64 = (1.0 + f64::from((row2[x] - rowm2[x]).abs()))
-                    / (1.0 + f64::from((row1[x] - rowm1[x]).abs()))
-                    - 1.0;
+        for c in 0..3 {
+            let mut sum1 = [0.0f64; 4];
+            for (row1, (row2, (rowm1, rowm2))) in img1[c].chunks_exact(width).zip(
+                img2[c]
+                    .chunks_exact(width)
+                    .zip(mu1[c].chunks_exact(width).zip(mu2[c].chunks_exact(width))),
+            ) {
+                for x in 0..width {
+                    let d1: f64 = (1.0 + f64::from((row2[x] - rowm2[x]).abs()))
+                        / (1.0 + f64::from((row1[x] - rowm1[x]).abs()))
+                        - 1.0;
 
-                // d1 > 0: distorted has an edge where original is smooth
-                //         (indicating ringing, color banding, blockiness, etc)
-                let artifact = d1.max(0.0);
-                sum1[0] += artifact;
-                sum1[1] += artifact.powi(4);
+                    // d1 > 0: distorted has an edge where original is smooth
+                    //         (indicating ringing, color banding, blockiness, etc)
+                    let artifact = d1.max(0.0);
+                    sum1[0] += artifact;
+                    sum1[1] += artifact.powi(4);
 
-                // d1 < 0: original has an edge where distorted is smooth
-                //         (indicating smoothing, blurring, smearing, etc)
-                let detail_lost = (-d1).max(0.0);
-                sum1[2] += detail_lost;
-                sum1[3] += detail_lost.powi(4);
+                    // d1 < 0: original has an edge where distorted is smooth
+                    //         (indicating smoothing, blurring, smearing, etc)
+                    let detail_lost = (-d1).max(0.0);
+                    sum1[2] += detail_lost;
+                    sum1[3] += detail_lost.powi(4);
+                }
             }
+            plane_averages[c * 4] = one_per_pixels * sum1[0];
+            plane_averages[c * 4 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
+            plane_averages[c * 4 + 2] = one_per_pixels * sum1[2];
+            plane_averages[c * 4 + 3] = (one_per_pixels * sum1[3]).sqrt().sqrt();
         }
-        plane_averages[c * 4] = one_per_pixels * sum1[0];
-        plane_averages[c * 4 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
-        plane_averages[c * 4 + 2] = one_per_pixels * sum1[2];
-        plane_averages[c * 4 + 3] = (one_per_pixels * sum1[3]).sqrt().sqrt();
-    }
 
-    plane_averages
+        plane_averages
     }
 }
 
@@ -603,6 +602,103 @@ mod tests {
             // RUNS
             (result - expected).abs() < 0.25f64,
             "Result {result:.6} not equal to expected {expected:.6}",
+        );
+    }
+
+    #[test]
+    fn test_xyb_simd_vs_yuvxyb() {
+        use yuvxyb::{ColorPrimaries, TransferCharacteristic};
+
+        // Test with the actual tank image to compare SIMD vs yuvxyb conversion
+        let source = image::open(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("test_data")
+                .join("tank_source.png"),
+        )
+        .unwrap();
+
+        let source_data: Vec<[f32; 3]> = source
+            .to_rgb32f()
+            .chunks_exact(3)
+            .map(|chunk| [chunk[0], chunk[1], chunk[2]])
+            .collect();
+
+        let width = source.width() as usize;
+        let height = source.height() as usize;
+
+        // Convert using yuvxyb's Xyb::from(LinearRgb) - the reference
+        let rgb_for_yuvxyb = Rgb::new(
+            source_data.clone(),
+            width,
+            height,
+            TransferCharacteristic::SRGB,
+            ColorPrimaries::BT709,
+        )
+        .unwrap();
+        let lrgb_for_yuvxyb = yuvxyb::LinearRgb::try_from(rgb_for_yuvxyb).unwrap();
+        let xyb_yuvxyb = yuvxyb::Xyb::from(lrgb_for_yuvxyb);
+
+        // Convert using our SIMD path
+        let rgb_for_simd = Rgb::new(
+            source_data,
+            width,
+            height,
+            TransferCharacteristic::SRGB,
+            ColorPrimaries::BT709,
+        )
+        .unwrap();
+        let lrgb_for_simd = LinearRgb::try_from(rgb_for_simd).unwrap();
+        let xyb_simd = linear_rgb_to_xyb_simd(lrgb_for_simd);
+
+        // Compare results
+        let mut max_diff = [0.0f32; 3];
+        let mut sum_diff = [0.0f64; 3];
+        let mut diff_count = 0usize;
+
+        for (yuvxyb_pix, simd_pix) in xyb_yuvxyb.data().iter().zip(xyb_simd.data().iter()) {
+            for c in 0..3 {
+                let diff = (yuvxyb_pix[c] - simd_pix[c]).abs();
+                max_diff[c] = max_diff[c].max(diff);
+                sum_diff[c] += diff as f64;
+                if diff > 1e-6 {
+                    diff_count += 1;
+                }
+            }
+        }
+
+        let n = xyb_yuvxyb.data().len() as f64;
+        println!("XYB SIMD vs yuvxyb comparison:");
+        println!(
+            "  Max diff: X={:.2e}, Y={:.2e}, B={:.2e}",
+            max_diff[0], max_diff[1], max_diff[2]
+        );
+        println!(
+            "  Avg diff: X={:.2e}, Y={:.2e}, B={:.2e}",
+            sum_diff[0] / n,
+            sum_diff[1] / n,
+            sum_diff[2] / n
+        );
+        println!(
+            "  Pixels with diff > 1e-6: {} / {}",
+            diff_count,
+            xyb_yuvxyb.data().len()
+        );
+
+        // Sample a few pixels for detailed comparison
+        let sample_indices = [0, 1000, 10000, 100000, xyb_yuvxyb.data().len() - 1];
+        for &idx in &sample_indices {
+            if idx < xyb_yuvxyb.data().len() {
+                let y = xyb_yuvxyb.data()[idx];
+                let s = xyb_simd.data()[idx];
+                println!("  Pixel {}: yuvxyb={:?}, simd={:?}", idx, y, s);
+            }
+        }
+
+        // Fail if there's significant difference
+        assert!(
+            max_diff[0] < 1e-5 && max_diff[1] < 1e-5 && max_diff[2] < 1e-5,
+            "SIMD XYB differs from yuvxyb: max_diff={:?}",
+            max_diff
         );
     }
 }

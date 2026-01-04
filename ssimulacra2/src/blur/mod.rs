@@ -33,9 +33,17 @@ use simd_gaussian::SimdGaussian;
 /// match the width and height of this instance. If you reduce the image size (e.g. via
 /// downscaling), [`shrink_to`][Self::shrink_to] can be used to resize the internal buffers.
 pub struct Blur {
-    #[cfg(all(not(feature = "inaccurate-libblur"), not(feature = "blur-transpose"), not(feature = "blur-simd")))]
+    #[cfg(all(
+        not(feature = "inaccurate-libblur"),
+        not(feature = "blur-transpose"),
+        not(feature = "blur-simd")
+    ))]
     kernel: RecursiveGaussian,
-    #[cfg(all(not(feature = "inaccurate-libblur"), not(feature = "blur-transpose"), not(feature = "blur-simd")))]
+    #[cfg(all(
+        not(feature = "inaccurate-libblur"),
+        not(feature = "blur-transpose"),
+        not(feature = "blur-simd")
+    ))]
     temp: Vec<f32>,
     #[cfg(feature = "inaccurate-libblur")]
     backend: LibblurBackend,
@@ -52,7 +60,11 @@ impl Blur {
     /// This pre-allocates the necessary buffers.
     #[must_use]
     pub fn new(width: usize, height: usize) -> Self {
-        #[cfg(all(not(feature = "inaccurate-libblur"), not(feature = "blur-transpose"), not(feature = "blur-simd")))]
+        #[cfg(all(
+            not(feature = "inaccurate-libblur"),
+            not(feature = "blur-transpose"),
+            not(feature = "blur-simd")
+        ))]
         {
             Blur {
                 kernel: RecursiveGaussian,
@@ -92,7 +104,11 @@ impl Blur {
     /// This will [truncate][Vec::truncate] the internal buffers
     /// without affecting the allocated memory.
     pub fn shrink_to(&mut self, width: usize, height: usize) {
-        #[cfg(all(not(feature = "inaccurate-libblur"), not(feature = "blur-transpose"), not(feature = "blur-simd")))]
+        #[cfg(all(
+            not(feature = "inaccurate-libblur"),
+            not(feature = "blur-transpose"),
+            not(feature = "blur-simd")
+        ))]
         {
             self.temp.truncate(width * height);
         }
@@ -121,7 +137,11 @@ impl Blur {
         ]
     }
 
-    #[cfg(all(not(feature = "inaccurate-libblur"), not(feature = "blur-transpose"), not(feature = "blur-simd")))]
+    #[cfg(all(
+        not(feature = "inaccurate-libblur"),
+        not(feature = "blur-transpose"),
+        not(feature = "blur-simd")
+    ))]
     fn blur_plane(&mut self, plane: &[f32]) -> Vec<f32> {
         let mut out = vec![0f32; self.width * self.height];
         self.kernel

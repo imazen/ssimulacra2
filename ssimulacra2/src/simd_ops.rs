@@ -47,34 +47,94 @@ pub fn ssim_map_simd(
             while x + 16 <= width {
                 // Load 16 pixels
                 let mu1 = f32x16::new([
-                    row_m1[x], row_m1[x+1], row_m1[x+2], row_m1[x+3],
-                    row_m1[x+4], row_m1[x+5], row_m1[x+6], row_m1[x+7],
-                    row_m1[x+8], row_m1[x+9], row_m1[x+10], row_m1[x+11],
-                    row_m1[x+12], row_m1[x+13], row_m1[x+14], row_m1[x+15],
+                    row_m1[x],
+                    row_m1[x + 1],
+                    row_m1[x + 2],
+                    row_m1[x + 3],
+                    row_m1[x + 4],
+                    row_m1[x + 5],
+                    row_m1[x + 6],
+                    row_m1[x + 7],
+                    row_m1[x + 8],
+                    row_m1[x + 9],
+                    row_m1[x + 10],
+                    row_m1[x + 11],
+                    row_m1[x + 12],
+                    row_m1[x + 13],
+                    row_m1[x + 14],
+                    row_m1[x + 15],
                 ]);
                 let mu2 = f32x16::new([
-                    row_m2[x], row_m2[x+1], row_m2[x+2], row_m2[x+3],
-                    row_m2[x+4], row_m2[x+5], row_m2[x+6], row_m2[x+7],
-                    row_m2[x+8], row_m2[x+9], row_m2[x+10], row_m2[x+11],
-                    row_m2[x+12], row_m2[x+13], row_m2[x+14], row_m2[x+15],
+                    row_m2[x],
+                    row_m2[x + 1],
+                    row_m2[x + 2],
+                    row_m2[x + 3],
+                    row_m2[x + 4],
+                    row_m2[x + 5],
+                    row_m2[x + 6],
+                    row_m2[x + 7],
+                    row_m2[x + 8],
+                    row_m2[x + 9],
+                    row_m2[x + 10],
+                    row_m2[x + 11],
+                    row_m2[x + 12],
+                    row_m2[x + 13],
+                    row_m2[x + 14],
+                    row_m2[x + 15],
                 ]);
                 let s11_vals = f32x16::new([
-                    row_s11[x], row_s11[x+1], row_s11[x+2], row_s11[x+3],
-                    row_s11[x+4], row_s11[x+5], row_s11[x+6], row_s11[x+7],
-                    row_s11[x+8], row_s11[x+9], row_s11[x+10], row_s11[x+11],
-                    row_s11[x+12], row_s11[x+13], row_s11[x+14], row_s11[x+15],
+                    row_s11[x],
+                    row_s11[x + 1],
+                    row_s11[x + 2],
+                    row_s11[x + 3],
+                    row_s11[x + 4],
+                    row_s11[x + 5],
+                    row_s11[x + 6],
+                    row_s11[x + 7],
+                    row_s11[x + 8],
+                    row_s11[x + 9],
+                    row_s11[x + 10],
+                    row_s11[x + 11],
+                    row_s11[x + 12],
+                    row_s11[x + 13],
+                    row_s11[x + 14],
+                    row_s11[x + 15],
                 ]);
                 let s22_vals = f32x16::new([
-                    row_s22[x], row_s22[x+1], row_s22[x+2], row_s22[x+3],
-                    row_s22[x+4], row_s22[x+5], row_s22[x+6], row_s22[x+7],
-                    row_s22[x+8], row_s22[x+9], row_s22[x+10], row_s22[x+11],
-                    row_s22[x+12], row_s22[x+13], row_s22[x+14], row_s22[x+15],
+                    row_s22[x],
+                    row_s22[x + 1],
+                    row_s22[x + 2],
+                    row_s22[x + 3],
+                    row_s22[x + 4],
+                    row_s22[x + 5],
+                    row_s22[x + 6],
+                    row_s22[x + 7],
+                    row_s22[x + 8],
+                    row_s22[x + 9],
+                    row_s22[x + 10],
+                    row_s22[x + 11],
+                    row_s22[x + 12],
+                    row_s22[x + 13],
+                    row_s22[x + 14],
+                    row_s22[x + 15],
                 ]);
                 let s12_vals = f32x16::new([
-                    row_s12[x], row_s12[x+1], row_s12[x+2], row_s12[x+3],
-                    row_s12[x+4], row_s12[x+5], row_s12[x+6], row_s12[x+7],
-                    row_s12[x+8], row_s12[x+9], row_s12[x+10], row_s12[x+11],
-                    row_s12[x+12], row_s12[x+13], row_s12[x+14], row_s12[x+15],
+                    row_s12[x],
+                    row_s12[x + 1],
+                    row_s12[x + 2],
+                    row_s12[x + 3],
+                    row_s12[x + 4],
+                    row_s12[x + 5],
+                    row_s12[x + 6],
+                    row_s12[x + 7],
+                    row_s12[x + 8],
+                    row_s12[x + 9],
+                    row_s12[x + 10],
+                    row_s12[x + 11],
+                    row_s12[x + 12],
+                    row_s12[x + 13],
+                    row_s12[x + 14],
+                    row_s12[x + 15],
                 ]);
 
                 // Compute intermediate values
@@ -168,35 +228,83 @@ pub fn edge_diff_map_simd(
             while x + 16 <= width {
                 // Load values
                 let r1 = f32x16::new([
-                    row1[x], row1[x+1], row1[x+2], row1[x+3],
-                    row1[x+4], row1[x+5], row1[x+6], row1[x+7],
-                    row1[x+8], row1[x+9], row1[x+10], row1[x+11],
-                    row1[x+12], row1[x+13], row1[x+14], row1[x+15],
+                    row1[x],
+                    row1[x + 1],
+                    row1[x + 2],
+                    row1[x + 3],
+                    row1[x + 4],
+                    row1[x + 5],
+                    row1[x + 6],
+                    row1[x + 7],
+                    row1[x + 8],
+                    row1[x + 9],
+                    row1[x + 10],
+                    row1[x + 11],
+                    row1[x + 12],
+                    row1[x + 13],
+                    row1[x + 14],
+                    row1[x + 15],
                 ]);
                 let r2 = f32x16::new([
-                    row2[x], row2[x+1], row2[x+2], row2[x+3],
-                    row2[x+4], row2[x+5], row2[x+6], row2[x+7],
-                    row2[x+8], row2[x+9], row2[x+10], row2[x+11],
-                    row2[x+12], row2[x+13], row2[x+14], row2[x+15],
+                    row2[x],
+                    row2[x + 1],
+                    row2[x + 2],
+                    row2[x + 3],
+                    row2[x + 4],
+                    row2[x + 5],
+                    row2[x + 6],
+                    row2[x + 7],
+                    row2[x + 8],
+                    row2[x + 9],
+                    row2[x + 10],
+                    row2[x + 11],
+                    row2[x + 12],
+                    row2[x + 13],
+                    row2[x + 14],
+                    row2[x + 15],
                 ]);
                 let rm1 = f32x16::new([
-                    rowm1[x], rowm1[x+1], rowm1[x+2], rowm1[x+3],
-                    rowm1[x+4], rowm1[x+5], rowm1[x+6], rowm1[x+7],
-                    rowm1[x+8], rowm1[x+9], rowm1[x+10], rowm1[x+11],
-                    rowm1[x+12], rowm1[x+13], rowm1[x+14], rowm1[x+15],
+                    rowm1[x],
+                    rowm1[x + 1],
+                    rowm1[x + 2],
+                    rowm1[x + 3],
+                    rowm1[x + 4],
+                    rowm1[x + 5],
+                    rowm1[x + 6],
+                    rowm1[x + 7],
+                    rowm1[x + 8],
+                    rowm1[x + 9],
+                    rowm1[x + 10],
+                    rowm1[x + 11],
+                    rowm1[x + 12],
+                    rowm1[x + 13],
+                    rowm1[x + 14],
+                    rowm1[x + 15],
                 ]);
                 let rm2 = f32x16::new([
-                    rowm2[x], rowm2[x+1], rowm2[x+2], rowm2[x+3],
-                    rowm2[x+4], rowm2[x+5], rowm2[x+6], rowm2[x+7],
-                    rowm2[x+8], rowm2[x+9], rowm2[x+10], rowm2[x+11],
-                    rowm2[x+12], rowm2[x+13], rowm2[x+14], rowm2[x+15],
+                    rowm2[x],
+                    rowm2[x + 1],
+                    rowm2[x + 2],
+                    rowm2[x + 3],
+                    rowm2[x + 4],
+                    rowm2[x + 5],
+                    rowm2[x + 6],
+                    rowm2[x + 7],
+                    rowm2[x + 8],
+                    rowm2[x + 9],
+                    rowm2[x + 10],
+                    rowm2[x + 11],
+                    rowm2[x + 12],
+                    rowm2[x + 13],
+                    rowm2[x + 14],
+                    rowm2[x + 15],
                 ]);
 
                 // d1 = (1 + |row2 - rowm2|) / (1 + |row1 - rowm1|) - 1
                 let d1_temp = r1 - rm1;
-                let diff1 = d1_temp.max(-d1_temp);  // abs() = max(x, -x)
+                let diff1 = d1_temp.max(-d1_temp); // abs() = max(x, -x)
                 let d2_temp = r2 - rm2;
-                let diff2 = d2_temp.max(-d2_temp);  // abs() = max(x, -x)
+                let diff2 = d2_temp.max(-d2_temp); // abs() = max(x, -x)
                 let d1 = (one_simd + diff2) / (one_simd + diff1) - one_simd;
 
                 // artifact = max(d1, 0)
@@ -249,11 +357,7 @@ pub fn edge_diff_map_simd(
 #[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub fn image_multiply_simd(
-    img1: &[Vec<f32>; 3],
-    img2: &[Vec<f32>; 3],
-    out: &mut [Vec<f32>; 3],
-) {
+pub fn image_multiply_simd(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
     for c in 0..3 {
         let plane1 = &img1[c];
         let plane2 = &img2[c];
@@ -264,16 +368,40 @@ pub fn image_multiply_simd(
         // Process 16 elements at a time
         while i + 16 <= plane1.len() {
             let p1 = f32x16::new([
-                plane1[i], plane1[i+1], plane1[i+2], plane1[i+3],
-                plane1[i+4], plane1[i+5], plane1[i+6], plane1[i+7],
-                plane1[i+8], plane1[i+9], plane1[i+10], plane1[i+11],
-                plane1[i+12], plane1[i+13], plane1[i+14], plane1[i+15],
+                plane1[i],
+                plane1[i + 1],
+                plane1[i + 2],
+                plane1[i + 3],
+                plane1[i + 4],
+                plane1[i + 5],
+                plane1[i + 6],
+                plane1[i + 7],
+                plane1[i + 8],
+                plane1[i + 9],
+                plane1[i + 10],
+                plane1[i + 11],
+                plane1[i + 12],
+                plane1[i + 13],
+                plane1[i + 14],
+                plane1[i + 15],
             ]);
             let p2 = f32x16::new([
-                plane2[i], plane2[i+1], plane2[i+2], plane2[i+3],
-                plane2[i+4], plane2[i+5], plane2[i+6], plane2[i+7],
-                plane2[i+8], plane2[i+9], plane2[i+10], plane2[i+11],
-                plane2[i+12], plane2[i+13], plane2[i+14], plane2[i+15],
+                plane2[i],
+                plane2[i + 1],
+                plane2[i + 2],
+                plane2[i + 3],
+                plane2[i + 4],
+                plane2[i + 5],
+                plane2[i + 6],
+                plane2[i + 7],
+                plane2[i + 8],
+                plane2[i + 9],
+                plane2[i + 10],
+                plane2[i + 11],
+                plane2[i + 12],
+                plane2[i + 13],
+                plane2[i + 14],
+                plane2[i + 15],
             ]);
             let result = p1 * p2;
             let result_arr = result.to_array();

@@ -441,12 +441,44 @@ fn main() {
     println!("Average per iteration: {:.3} ms\n", total / 100.0);
 
     println!("Runtime breakdown:");
-    println!("  blur:             {:.3} ms ({:.1}%)", total_timings.blur / 100.0, total_timings.blur / total * 100.0);
-    println!("  xyb_to_planar:    {:.3} ms ({:.1}%)", total_timings.xyb_to_planar / 100.0, total_timings.xyb_to_planar / total * 100.0);
-    println!("  image_multiply:   {:.3} ms ({:.1}%)", total_timings.image_multiply / 100.0, total_timings.image_multiply / total * 100.0);
-    println!("  ssim_map:         {:.3} ms ({:.1}%)", total_timings.ssim_map / 100.0, total_timings.ssim_map / total * 100.0);
-    println!("  edge_diff_map:    {:.3} ms ({:.1}%)", total_timings.edge_diff_map / 100.0, total_timings.edge_diff_map / total * 100.0);
-    println!("  downscale:        {:.3} ms ({:.1}%)", total_timings.downscale / 100.0, total_timings.downscale / total * 100.0);
-    println!("  xyb_conversion:   {:.3} ms ({:.1}%)", total_timings.xyb_conversion / 100.0, total_timings.xyb_conversion / total * 100.0);
-    println!("  other:            {:.3} ms ({:.1}%)", total_timings.other / 100.0, total_timings.other / total * 100.0);
+    println!(
+        "  blur:             {:.3} ms ({:.1}%)",
+        total_timings.blur / 100.0,
+        total_timings.blur / total * 100.0
+    );
+    println!(
+        "  xyb_to_planar:    {:.3} ms ({:.1}%)",
+        total_timings.xyb_to_planar / 100.0,
+        total_timings.xyb_to_planar / total * 100.0
+    );
+    println!(
+        "  image_multiply:   {:.3} ms ({:.1}%)",
+        total_timings.image_multiply / 100.0,
+        total_timings.image_multiply / total * 100.0
+    );
+    println!(
+        "  ssim_map:         {:.3} ms ({:.1}%)",
+        total_timings.ssim_map / 100.0,
+        total_timings.ssim_map / total * 100.0
+    );
+    println!(
+        "  edge_diff_map:    {:.3} ms ({:.1}%)",
+        total_timings.edge_diff_map / 100.0,
+        total_timings.edge_diff_map / total * 100.0
+    );
+    println!(
+        "  downscale:        {:.3} ms ({:.1}%)",
+        total_timings.downscale / 100.0,
+        total_timings.downscale / total * 100.0
+    );
+    println!(
+        "  xyb_conversion:   {:.3} ms ({:.1}%)",
+        total_timings.xyb_conversion / 100.0,
+        total_timings.xyb_conversion / total * 100.0
+    );
+    println!(
+        "  other:            {:.3} ms ({:.1}%)",
+        total_timings.other / 100.0,
+        total_timings.other / total * 100.0
+    );
 }

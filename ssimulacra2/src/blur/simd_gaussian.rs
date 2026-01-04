@@ -2,7 +2,6 @@
 ///
 /// Uses f32x4 (SSE2, 128-bit SIMD) to process 4 columns simultaneously
 /// in the vertical pass. This is the fastest configuration on most CPUs.
-
 use wide::f32x4;
 
 mod consts {
@@ -235,14 +234,15 @@ impl SimdGaussian {
                 // Load 4 values from top and bottom rows
                 let top_vals = if top >= 0 && (top as usize * width + i + 3) < input.len() {
                     let idx = top as usize * width + i;
-                    f32x4::new([input[idx], input[idx+1], input[idx+2], input[idx+3]])
+                    f32x4::new([input[idx], input[idx + 1], input[idx + 2], input[idx + 3]])
                 } else {
                     zeroes
                 };
 
-                let bottom_vals = if bottom >= 0 && (bottom as usize * width + i + 3) < input.len() {
+                let bottom_vals = if bottom >= 0 && (bottom as usize * width + i + 3) < input.len()
+                {
                     let idx = bottom as usize * width + i;
-                    f32x4::new([input[idx], input[idx+1], input[idx+2], input[idx+3]])
+                    f32x4::new([input[idx], input[idx + 1], input[idx + 2], input[idx + 3]])
                 } else {
                     zeroes
                 };
@@ -254,13 +254,16 @@ impl SimdGaussian {
                 let i3 = i1 + COLUMNS;
                 let i5 = i3 + COLUMNS;
 
-                let prev_1_vec = f32x4::new([prev[i1], prev[i1+1], prev[i1+2], prev[i1+3]]);
-                let prev_3_vec = f32x4::new([prev[i3], prev[i3+1], prev[i3+2], prev[i3+3]]);
-                let prev_5_vec = f32x4::new([prev[i5], prev[i5+1], prev[i5+2], prev[i5+3]]);
+                let prev_1_vec = f32x4::new([prev[i1], prev[i1 + 1], prev[i1 + 2], prev[i1 + 3]]);
+                let prev_3_vec = f32x4::new([prev[i3], prev[i3 + 1], prev[i3 + 2], prev[i3 + 3]]);
+                let prev_5_vec = f32x4::new([prev[i5], prev[i5 + 1], prev[i5 + 2], prev[i5 + 3]]);
 
-                let prev2_1_vec = f32x4::new([prev2[i1], prev2[i1+1], prev2[i1+2], prev2[i1+3]]);
-                let prev2_3_vec = f32x4::new([prev2[i3], prev2[i3+1], prev2[i3+2], prev2[i3+3]]);
-                let prev2_5_vec = f32x4::new([prev2[i5], prev2[i5+1], prev2[i5+2], prev2[i5+3]]);
+                let prev2_1_vec =
+                    f32x4::new([prev2[i1], prev2[i1 + 1], prev2[i1 + 2], prev2[i1 + 3]]);
+                let prev2_3_vec =
+                    f32x4::new([prev2[i3], prev2[i3 + 1], prev2[i3 + 2], prev2[i3 + 3]]);
+                let prev2_5_vec =
+                    f32x4::new([prev2[i5], prev2[i5 + 1], prev2[i5 + 2], prev2[i5 + 3]]);
 
                 // SIMD computation of IIR filter
                 let out1 = prev_1_vec.mul_add(mul_prev_1, prev2_1_vec);
