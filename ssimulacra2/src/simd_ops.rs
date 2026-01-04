@@ -232,3 +232,52 @@ pub(crate) fn image_multiply_simd(
         }
     }
 }
+
+/// SIMD-optimized deinterleave from [[f32; 3]] to [Vec<f32>; 3]
+#[cfg(feature = "simd-ops")]
+#[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
+pub(crate) fn xyb_to_planar_simd(data: &[[f32; 3]], width: usize, height: usize) -> [Vec<f32>; 3] {
+    let len = width * height;
+    let mut out0 = vec![0.0f32; len];
+    let mut out1 = vec![0.0f32; len];
+    let mut out2 = vec![0.0f32; len];
+
+    let mut i = 0;
+
+    // Process 4 pixels at once
+    while i + 4 <= len {
+        // Deinterleave 4 pixels directly
+        unsafe {
+            let p0 = *data.get_unchecked(i);
+            let p1 = *data.get_unchecked(i + 1);
+            let p2 = *data.get_unchecked(i + 2);
+            let p3 = *data.get_unchecked(i + 3);
+
+            *out0.get_unchecked_mut(i) = p0[0];
+            *out0.get_unchecked_mut(i + 1) = p1[0];
+            *out0.get_unchecked_mut(i + 2) = p2[0];
+            *out0.get_unchecked_mut(i + 3) = p3[0];
+
+            *out1.get_unchecked_mut(i) = p0[1];
+            *out1.get_unchecked_mut(i + 1) = p1[1];
+            *out1.get_unchecked_mut(i + 2) = p2[1];
+            *out1.get_unchecked_mut(i + 3) = p3[1];
+
+            *out2.get_unchecked_mut(i) = p0[2];
+            *out2.get_unchecked_mut(i + 1) = p1[2];
+            *out2.get_unchecked_mut(i + 2) = p2[2];
+            *out2.get_unchecked_mut(i + 3) = p3[2];
+        }
+
+        i += 4;
+    }
+
+    // Handle remainder
+    for i in i..len {
+        out0[i] = data[i][0];
+        out1[i] = data[i][1];
+        out2[i] = data[i][2];
+    }
+
+    [out0, out1, out2]
+}

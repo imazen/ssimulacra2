@@ -144,23 +144,31 @@ pub(crate) fn make_positive_xyb(xyb: &mut Xyb) {
 }
 
 pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
-    let mut out1 = vec![0.0f32; xyb.width() * xyb.height()];
-    let mut out2 = vec![0.0f32; xyb.width() * xyb.height()];
-    let mut out3 = vec![0.0f32; xyb.width() * xyb.height()];
-    for (((i, o1), o2), o3) in xyb
-        .data()
-        .iter()
-        .copied()
-        .zip(out1.iter_mut())
-        .zip(out2.iter_mut())
-        .zip(out3.iter_mut())
+    #[cfg(feature = "simd-ops")]
     {
-        *o1 = i[0];
-        *o2 = i[1];
-        *o3 = i[2];
+        return simd_ops::xyb_to_planar_simd(xyb.data(), xyb.width(), xyb.height());
     }
 
-    [out1, out2, out3]
+    #[cfg(not(feature = "simd-ops"))]
+    {
+        let mut out1 = vec![0.0f32; xyb.width() * xyb.height()];
+        let mut out2 = vec![0.0f32; xyb.width() * xyb.height()];
+        let mut out3 = vec![0.0f32; xyb.width() * xyb.height()];
+        for (((i, o1), o2), o3) in xyb
+            .data()
+            .iter()
+            .copied()
+            .zip(out1.iter_mut())
+            .zip(out2.iter_mut())
+            .zip(out3.iter_mut())
+        {
+            *o1 = i[0];
+            *o2 = i[1];
+            *o3 = i[2];
+        }
+
+        [out1, out2, out3]
+    }
 }
 
 pub(crate) fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {

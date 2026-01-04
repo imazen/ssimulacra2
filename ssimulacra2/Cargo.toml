@@ -37,7 +37,7 @@ sha2 = "0.10"
 default = ["rayon", "blur-transpose"]
 blur-accurate = []  # Baseline: f64 IIR (slower, 0.955 max error vs C++)
 blur-transpose = []  # Default: f32 IIR transpose (~4x faster, 0.926 max error)
-blur-simd = ["wide", "multiversion"]  # SIMD optimized (~3.6x faster, 1.24 max error)
+blur-simd = ["wide", "multiversion"]  # SIMD blur (~3.6x faster, 1.24 max error, 0.20 on YUV patterns)
 inaccurate-libblur = ["libblur"]  # Different blur algorithm - see src/blur/LIBBLUR_NOTE.md
 simd-ops = ["wide", "multiversion"]  # SIMD-optimized compute pipeline (ssim_map, edge_diff_map, etc.)
 
