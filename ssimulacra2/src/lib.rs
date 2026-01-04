@@ -1,12 +1,14 @@
 mod blur;
+mod precompute;
 
 pub use blur::Blur;
+pub use precompute::Ssim2Reference;
 pub use yuvxyb::{CastFromPrimitive, Frame, LinearRgb, Pixel, Plane, Rgb, Xyb, Yuv};
 pub use yuvxyb::{ColorPrimaries, MatrixCoefficients, TransferCharacteristic, YuvConfig};
 
 // How often to downscale and score the input images.
 // Each scaling step will downscale by a factor of two.
-const NUM_SCALES: usize = 6;
+pub(crate) const NUM_SCALES: usize = 6;
 
 /// Errors which can occur when attempting to calculate a SSIMULACRA2 score from two input images.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -126,7 +128,7 @@ where
 //  B: 0.272295..0.938012
 // The maximum pixel-wise difference has to be <= 1 for the ssim formula to make
 // sense.
-fn make_positive_xyb(xyb: &mut Xyb) {
+pub(crate) fn make_positive_xyb(xyb: &mut Xyb) {
     for pix in xyb.data_mut().iter_mut() {
         pix[2] = (pix[2] - pix[1]) + 0.55;
         pix[0] = (pix[0]).mul_add(14.0, 0.42);
@@ -134,7 +136,7 @@ fn make_positive_xyb(xyb: &mut Xyb) {
     }
 }
 
-fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
+pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
     let mut out1 = vec![0.0f32; xyb.width() * xyb.height()];
     let mut out2 = vec![0.0f32; xyb.width() * xyb.height()];
     let mut out3 = vec![0.0f32; xyb.width() * xyb.height()];
@@ -154,7 +156,7 @@ fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
     [out1, out2, out3]
 }
 
-fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
+pub(crate) fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
     for ((plane1, plane2), out_plane) in img1.iter().zip(img2.iter()).zip(out.iter_mut()) {
         for ((&p1, &p2), o) in plane1.iter().zip(plane2.iter()).zip(out_plane.iter_mut()) {
             *o = p1 * p2;
@@ -162,7 +164,7 @@ fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32
     }
 }
 
-fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
+pub(crate) fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
     const SCALE: usize = 2;
     let in_w = in_data.width();
     let in_h = in_data.height();
@@ -194,7 +196,7 @@ fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
     LinearRgb::new(out_data, out_w, out_h).expect("Resolution and data size match")
 }
 
-fn ssim_map(
+pub(crate) fn ssim_map(
     width: usize,
     height: usize,
     m1: &[Vec<f32>; 3],
@@ -253,7 +255,7 @@ fn ssim_map(
     plane_averages
 }
 
-fn edge_diff_map(
+pub(crate) fn edge_diff_map(
     width: usize,
     height: usize,
     img1: &[Vec<f32>; 3],
@@ -299,12 +301,12 @@ fn edge_diff_map(
 }
 
 #[derive(Debug, Clone, Default)]
-struct Msssim {
+pub(crate) struct Msssim {
     pub scales: Vec<MsssimScale>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-struct MsssimScale {
+pub(crate) struct MsssimScale {
     pub avg_ssim: [f64; 3 * 2],
     pub avg_edgediff: [f64; 3 * 4],
 }
