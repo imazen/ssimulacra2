@@ -1,12 +1,15 @@
 mod blur;
 mod precompute;
 pub mod reference_data;
-#[cfg(feature = "simd-ops")]
-pub mod simd_ops;
-#[cfg(any(feature = "blur-simd", feature = "simd-ops", feature = "blur-unsafe-simd"))]
 mod xyb_simd;
 
-pub use blur::Blur;
+#[cfg(feature = "unsafe-simd")]
+mod xyb_unsafe_simd;
+
+#[cfg(feature = "unsafe-simd")]
+mod ssim_unsafe_simd;
+
+pub use blur::{Blur, BlurImpl};
 pub use precompute::Ssim2Reference;
 pub use yuvxyb::{CastFromPrimitive, Frame, LinearRgb, Pixel, Plane, Rgb, Xyb, Yuv};
 pub use yuvxyb::{ColorPrimaries, MatrixCoefficients, TransferCharacteristic, YuvConfig};
@@ -15,12 +18,96 @@ pub use yuvxyb::{ColorPrimaries, MatrixCoefficients, TransferCharacteristic, Yuv
 // Each scaling step will downscale by a factor of two.
 pub(crate) const NUM_SCALES: usize = 6;
 
+/// Implementation backend for XYB color conversion
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum XybImpl {
+    /// Scalar yuvxyb library (baseline)
+    Scalar,
+    /// Safe SIMD via wide crate
+    #[default]
+    Simd,
+    /// Raw x86 intrinsics (fastest)
+    #[cfg(feature = "unsafe-simd")]
+    UnsafeSimd,
+}
+
+impl XybImpl {
+    pub fn name(&self) -> &'static str {
+        match self {
+            XybImpl::Scalar => "scalar (yuvxyb)",
+            XybImpl::Simd => "simd (wide crate)",
+            #[cfg(feature = "unsafe-simd")]
+            XybImpl::UnsafeSimd => "unsafe-simd (raw intrinsics)",
+        }
+    }
+}
+
+/// Implementation backend for SSIM/edge diff computations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ComputeImpl {
+    /// Scalar implementation (baseline)
+    #[default]
+    Scalar,
+    /// Safe SIMD via wide crate
+    Simd,
+    /// Raw x86 intrinsics (fastest)
+    #[cfg(feature = "unsafe-simd")]
+    UnsafeSimd,
+}
+
+impl ComputeImpl {
+    pub fn name(&self) -> &'static str {
+        match self {
+            ComputeImpl::Scalar => "scalar",
+            ComputeImpl::Simd => "simd (wide crate)",
+            #[cfg(feature = "unsafe-simd")]
+            ComputeImpl::UnsafeSimd => "unsafe-simd (raw intrinsics)",
+        }
+    }
+}
+
+/// Configuration for SSIMULACRA2 computation implementations
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Ssimulacra2Config {
+    pub blur: BlurImpl,
+    pub xyb: XybImpl,
+    pub compute: ComputeImpl,
+}
+
+impl Ssimulacra2Config {
+    /// Default configuration using safe SIMD for all operations
+    pub fn simd() -> Self {
+        Self {
+            blur: BlurImpl::Simd,
+            xyb: XybImpl::Simd,
+            compute: ComputeImpl::Simd,
+        }
+    }
+
+    /// Configuration using unsafe SIMD for all operations (fastest)
+    #[cfg(feature = "unsafe-simd")]
+    pub fn unsafe_simd() -> Self {
+        Self {
+            blur: BlurImpl::UnsafeSimd,
+            xyb: XybImpl::UnsafeSimd,
+            compute: ComputeImpl::UnsafeSimd,
+        }
+    }
+
+    /// Scalar configuration (baseline, most compatible)
+    pub fn scalar() -> Self {
+        Self {
+            blur: BlurImpl::Scalar,
+            xyb: XybImpl::Scalar,
+            compute: ComputeImpl::Scalar,
+        }
+    }
+}
+
 /// Errors which can occur when attempting to calculate a SSIMULACRA2 score from two input images.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Ssimulacra2Error {
     /// The conversion from input image to [LinearRgb] (via [TryFrom]) returned an [Err].
-    /// Note that the conversion from LinearRgb to [Xyb] cannot fail, which means that
-    /// this is the only point of failure regarding image conversion.
     #[error("Failed to convert input image to linear RGB")]
     LinearRgbConversionFailed,
 
@@ -29,23 +116,39 @@ pub enum Ssimulacra2Error {
     NonMatchingImageDimensions,
 
     /// One of the input images has a width and/or height of less than 8 pixels.
-    /// This is not currently supported by the SSIMULACRA2 metric.
     #[error("Images must be at least 8x8 pixels")]
     InvalidImageSize,
 
-    /// Gaussian blur operation failed (libblur backend).
+    /// Gaussian blur operation failed.
     #[error("Gaussian blur operation failed")]
     GaussianBlurError,
 }
 
-/// Computes the SSIMULACRA2 score for a given input frame and the distorted
-/// version of that frame.
-///
-/// # Errors
-/// - If the source and distorted image width and height do not match
-/// - If the source or distorted image cannot be converted to XYB successfully
-/// - If the image is smaller than 8x8 pixels
+/// Computes the SSIMULACRA2 score with default configuration (safe SIMD).
 pub fn compute_frame_ssimulacra2<T, U>(source: T, distorted: U) -> Result<f64, Ssimulacra2Error>
+where
+    LinearRgb: TryFrom<T> + TryFrom<U>,
+{
+    compute_frame_ssimulacra2_impl(source, distorted, Ssimulacra2Config::default())
+}
+
+/// Computes the SSIMULACRA2 score with custom implementation configuration.
+pub fn compute_frame_ssimulacra2_with_config<T, U>(
+    source: T,
+    distorted: U,
+    config: Ssimulacra2Config,
+) -> Result<f64, Ssimulacra2Error>
+where
+    LinearRgb: TryFrom<T> + TryFrom<U>,
+{
+    compute_frame_ssimulacra2_impl(source, distorted, config)
+}
+
+fn compute_frame_ssimulacra2_impl<T, U>(
+    source: T,
+    distorted: U,
+    config: Ssimulacra2Config,
+) -> Result<f64, Ssimulacra2Error>
 where
     LinearRgb: TryFrom<T> + TryFrom<U>,
 {
@@ -73,7 +176,7 @@ where
         vec![0.0f32; width * height],
         vec![0.0f32; width * height],
     ];
-    let mut blur = Blur::new(width, height);
+    let mut blur = Blur::with_impl(width, height, config.blur);
     let mut msssim = Msssim::default();
 
     for scale in 0..NUM_SCALES {
@@ -92,31 +195,46 @@ where
         }
         blur.shrink_to(width, height);
 
-        let mut img1 = linear_rgb_to_xyb_simd(img1.clone());
-        let mut img2 = linear_rgb_to_xyb_simd(img2.clone());
+        let mut img1_xyb = linear_rgb_to_xyb(img1.clone(), config.xyb);
+        let mut img2_xyb = linear_rgb_to_xyb(img2.clone(), config.xyb);
 
-        make_positive_xyb(&mut img1);
-        make_positive_xyb(&mut img2);
+        make_positive_xyb(&mut img1_xyb);
+        make_positive_xyb(&mut img2_xyb);
 
-        // SSIMULACRA2 works with the data in a planar format,
-        // so we need to convert to that.
-        let img1 = xyb_to_planar(&img1);
-        let img2 = xyb_to_planar(&img2);
+        let img1_planar = xyb_to_planar(&img1_xyb);
+        let img2_planar = xyb_to_planar(&img2_xyb);
 
-        image_multiply(&img1, &img1, &mut mul);
+        image_multiply(&img1_planar, &img1_planar, &mut mul);
         let sigma1_sq = blur.blur(&mul);
 
-        image_multiply(&img2, &img2, &mut mul);
+        image_multiply(&img2_planar, &img2_planar, &mut mul);
         let sigma2_sq = blur.blur(&mul);
 
-        image_multiply(&img1, &img2, &mut mul);
+        image_multiply(&img1_planar, &img2_planar, &mut mul);
         let sigma12 = blur.blur(&mul);
 
-        let mu1 = blur.blur(&img1);
-        let mu2 = blur.blur(&img2);
+        let mu1 = blur.blur(&img1_planar);
+        let mu2 = blur.blur(&img2_planar);
 
-        let avg_ssim = ssim_map(width, height, &mu1, &mu2, &sigma1_sq, &sigma2_sq, &sigma12);
-        let avg_edgediff = edge_diff_map(width, height, &img1, &mu1, &img2, &mu2);
+        let avg_ssim = ssim_map(
+            width,
+            height,
+            &mu1,
+            &mu2,
+            &sigma1_sq,
+            &sigma2_sq,
+            &sigma12,
+            config.compute,
+        );
+        let avg_edgediff = edge_diff_map(
+            width,
+            height,
+            &img1_planar,
+            &mu1,
+            &img2_planar,
+            &mu2,
+            config.compute,
+        );
         msssim.scales.push(MsssimScale {
             avg_ssim,
             avg_edgediff,
@@ -126,35 +244,33 @@ where
     Ok(msssim.score())
 }
 
-/// Convert LinearRgb to Xyb using SIMD optimizations (when available)
-#[cfg(any(feature = "blur-simd", feature = "simd-ops", feature = "blur-unsafe-simd"))]
-pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
-    let width = linear_rgb.width();
-    let height = linear_rgb.height();
-    // Take ownership of the data and convert in-place (no clone!)
-    let mut data = linear_rgb.into_data();
-    xyb_simd::linear_rgb_to_xyb_simd(&mut data);
-    Xyb::new(data, width, height).expect("XYB construction should not fail with correct dimensions")
+/// Convert LinearRgb to Xyb using the specified implementation
+fn linear_rgb_to_xyb(linear_rgb: LinearRgb, impl_type: XybImpl) -> Xyb {
+    match impl_type {
+        XybImpl::Scalar => Xyb::try_from(linear_rgb).expect("XYB conversion should not fail"),
+        XybImpl::Simd => {
+            let width = linear_rgb.width();
+            let height = linear_rgb.height();
+            let mut data = linear_rgb.into_data();
+            xyb_simd::linear_rgb_to_xyb_simd(&mut data);
+            Xyb::new(data, width, height).expect("XYB construction should not fail")
+        }
+        #[cfg(feature = "unsafe-simd")]
+        XybImpl::UnsafeSimd => {
+            let width = linear_rgb.width();
+            let height = linear_rgb.height();
+            let mut data = linear_rgb.into_data();
+            xyb_unsafe_simd::linear_rgb_to_xyb_unsafe(&mut data);
+            Xyb::new(data, width, height).expect("XYB construction should not fail")
+        }
+    }
 }
 
-/// Scalar fallback for XYB conversion
-#[cfg(not(any(feature = "blur-simd", feature = "simd-ops", feature = "blur-unsafe-simd")))]
+// For backwards compatibility
 pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
-    // Use yuvxyb's native conversion (non-SIMD)
-    Xyb::try_from(linear_rgb).expect("XYB conversion should not fail")
+    linear_rgb_to_xyb(linear_rgb, XybImpl::Simd)
 }
 
-// Get all components in more or less 0..1 range
-// Range of Rec2020 with these adjustments:
-//  X: 0.017223..0.998838
-//  Y: 0.010000..0.855303
-//  B: 0.048759..0.989551
-// Range of sRGB:
-//  X: 0.204594..0.813402
-//  Y: 0.010000..0.855308
-//  B: 0.272295..0.938012
-// The maximum pixel-wise difference has to be <= 1 for the ssim formula to make
-// sense.
 pub(crate) fn make_positive_xyb(xyb: &mut Xyb) {
     for pix in xyb.data_mut().iter_mut() {
         pix[2] = (pix[2] - pix[1]) + 0.55;
@@ -164,45 +280,28 @@ pub(crate) fn make_positive_xyb(xyb: &mut Xyb) {
 }
 
 pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
-    #[cfg(feature = "simd-ops")]
+    let mut out1 = vec![0.0f32; xyb.width() * xyb.height()];
+    let mut out2 = vec![0.0f32; xyb.width() * xyb.height()];
+    let mut out3 = vec![0.0f32; xyb.width() * xyb.height()];
+    for (((i, o1), o2), o3) in xyb
+        .data()
+        .iter()
+        .copied()
+        .zip(out1.iter_mut())
+        .zip(out2.iter_mut())
+        .zip(out3.iter_mut())
     {
-        return simd_ops::xyb_to_planar_simd(xyb.data(), xyb.width(), xyb.height());
+        *o1 = i[0];
+        *o2 = i[1];
+        *o3 = i[2];
     }
-
-    #[cfg(not(feature = "simd-ops"))]
-    {
-        let mut out1 = vec![0.0f32; xyb.width() * xyb.height()];
-        let mut out2 = vec![0.0f32; xyb.width() * xyb.height()];
-        let mut out3 = vec![0.0f32; xyb.width() * xyb.height()];
-        for (((i, o1), o2), o3) in xyb
-            .data()
-            .iter()
-            .copied()
-            .zip(out1.iter_mut())
-            .zip(out2.iter_mut())
-            .zip(out3.iter_mut())
-        {
-            *o1 = i[0];
-            *o2 = i[1];
-            *o3 = i[2];
-        }
-
-        [out1, out2, out3]
-    }
+    [out1, out2, out3]
 }
 
 pub(crate) fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
-    #[cfg(feature = "simd-ops")]
-    {
-        simd_ops::image_multiply_simd(img1, img2, out);
-    }
-
-    #[cfg(not(feature = "simd-ops"))]
-    {
-        for ((plane1, plane2), out_plane) in img1.iter().zip(img2.iter()).zip(out.iter_mut()) {
-            for ((&p1, &p2), o) in plane1.iter().zip(plane2.iter()).zip(out_plane.iter_mut()) {
-                *o = p1 * p2;
-            }
+    for ((plane1, plane2), out_plane) in img1.iter().zip(img2.iter()).zip(out.iter_mut()) {
+        for ((&p1, &p2), o) in plane1.iter().zip(plane2.iter()).zip(out_plane.iter_mut()) {
+            *o = p1 * p2;
         }
     }
 }
@@ -219,19 +318,16 @@ pub(crate) fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
     for oy in 0..out_h {
         for ox in 0..out_w {
             for c in 0..3 {
-                // Use f64 accumulator to reduce rounding errors
                 let mut sum = 0f64;
                 for iy in 0..SCALE {
                     for ix in 0..SCALE {
                         let x = (ox * SCALE + ix).min(in_w - 1);
                         let y = (oy * SCALE + iy).min(in_h - 1);
                         let in_pix = in_data[y * in_w + x];
-
                         sum += f64::from(in_pix[c]);
                     }
                 }
                 let out_pix = &mut out_data[oy * out_w + ox];
-                // Divide directly instead of pre-computing multiplier
                 out_pix[c] = (sum / (SCALE * SCALE) as f64) as f32;
             }
         }
@@ -248,65 +344,63 @@ pub(crate) fn ssim_map(
     s11: &[Vec<f32>; 3],
     s22: &[Vec<f32>; 3],
     s12: &[Vec<f32>; 3],
+    impl_type: ComputeImpl,
 ) -> [f64; 3 * 2] {
-    #[cfg(feature = "simd-ops")]
-    {
-        return simd_ops::ssim_map_simd(width, height, m1, m2, s11, s22, s12);
-    }
-
-    #[cfg(not(feature = "simd-ops"))]
-    {
-        const C2: f32 = 0.0009f32;
-
-        let one_per_pixels = 1.0f64 / (width * height) as f64;
-        let mut plane_averages = [0f64; 3 * 2];
-
-        for c in 0..3 {
-            let mut sum1 = [0.0f64; 2];
-            for (row_m1, (row_m2, (row_s11, (row_s22, row_s12)))) in m1[c].chunks_exact(width).zip(
-                m2[c].chunks_exact(width).zip(
-                    s11[c]
-                        .chunks_exact(width)
-                        .zip(s22[c].chunks_exact(width).zip(s12[c].chunks_exact(width))),
-                ),
-            ) {
-                for x in 0..width {
-                    let mu1 = row_m1[x];
-                    let mu2 = row_m2[x];
-                    let mu11 = mu1 * mu1;
-                    let mu22 = mu2 * mu2;
-                    let mu12 = mu1 * mu2;
-                    let mu_diff = mu1 - mu2;
-
-                    // Correction applied compared to the original SSIM formula, which has:
-                    //   luma_err = 2 * mu1 * mu2 / (mu1^2 + mu2^2)
-                    //            = 1 - (mu1 - mu2)^2 / (mu1^2 + mu2^2)
-                    // The denominator causes error in the darks (low mu1 and mu2) to weigh
-                    // more than error in the brights (high mu1 and mu2). This would make
-                    // sense if values correspond to linear luma. However, the actual values
-                    // are either gamma-compressed luma (which supposedly is already
-                    // perceptually uniform) or chroma (where weighing green more than red
-                    // or blue more than yellow does not make any sense at all). So it is
-                    // better to simply drop this denominator.
-                    // Use f64 for SSIM computation to reduce rounding errors in uniform images
-                    let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
-                    let num_s = 2f64.mul_add(f64::from(row_s12[x] - mu12), f64::from(C2));
-                    let denom_s =
-                        f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
-                    // Use 1 - SSIM' so it becomes an error score instead of a quality
-                    // index. This makes it make sense to compute an L_4 norm.
-                    let mut d = 1.0f64 - (num_m * num_s) / denom_s;
-                    d = d.max(0.0);
-                    sum1[0] += d;
-                    sum1[1] += d.powi(4);
-                }
-            }
-            plane_averages[c * 2] = one_per_pixels * sum1[0];
-            plane_averages[c * 2 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
+    match impl_type {
+        ComputeImpl::Scalar | ComputeImpl::Simd => {
+            ssim_map_scalar(width, height, m1, m2, s11, s22, s12)
         }
-
-        plane_averages
+        #[cfg(feature = "unsafe-simd")]
+        ComputeImpl::UnsafeSimd => ssim_unsafe_simd::ssim_map_unsafe(width, height, m1, m2, s11, s22, s12),
     }
+}
+
+fn ssim_map_scalar(
+    width: usize,
+    height: usize,
+    m1: &[Vec<f32>; 3],
+    m2: &[Vec<f32>; 3],
+    s11: &[Vec<f32>; 3],
+    s22: &[Vec<f32>; 3],
+    s12: &[Vec<f32>; 3],
+) -> [f64; 3 * 2] {
+    const C2: f32 = 0.0009f32;
+
+    let one_per_pixels = 1.0f64 / (width * height) as f64;
+    let mut plane_averages = [0f64; 3 * 2];
+
+    for c in 0..3 {
+        let mut sum1 = [0.0f64; 2];
+        for (row_m1, (row_m2, (row_s11, (row_s22, row_s12)))) in m1[c].chunks_exact(width).zip(
+            m2[c].chunks_exact(width).zip(
+                s11[c]
+                    .chunks_exact(width)
+                    .zip(s22[c].chunks_exact(width).zip(s12[c].chunks_exact(width))),
+            ),
+        ) {
+            for x in 0..width {
+                let mu1 = row_m1[x];
+                let mu2 = row_m2[x];
+                let mu11 = mu1 * mu1;
+                let mu22 = mu2 * mu2;
+                let mu12 = mu1 * mu2;
+                let mu_diff = mu1 - mu2;
+
+                let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
+                let num_s = 2f64.mul_add(f64::from(row_s12[x] - mu12), f64::from(C2));
+                let denom_s =
+                    f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
+                let mut d = 1.0f64 - (num_m * num_s) / denom_s;
+                d = d.max(0.0);
+                sum1[0] += d;
+                sum1[1] += d.powi(4);
+            }
+        }
+        plane_averages[c * 2] = one_per_pixels * sum1[0];
+        plane_averages[c * 2 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
+    }
+
+    plane_averages
 }
 
 pub(crate) fn edge_diff_map(
@@ -316,50 +410,58 @@ pub(crate) fn edge_diff_map(
     mu1: &[Vec<f32>; 3],
     img2: &[Vec<f32>; 3],
     mu2: &[Vec<f32>; 3],
+    impl_type: ComputeImpl,
 ) -> [f64; 3 * 4] {
-    #[cfg(feature = "simd-ops")]
-    {
-        return simd_ops::edge_diff_map_simd(width, height, img1, mu1, img2, mu2);
-    }
-
-    #[cfg(not(feature = "simd-ops"))]
-    {
-        let one_per_pixels = 1.0f64 / (width * height) as f64;
-        let mut plane_averages = [0f64; 3 * 4];
-
-        for c in 0..3 {
-            let mut sum1 = [0.0f64; 4];
-            for (row1, (row2, (rowm1, rowm2))) in img1[c].chunks_exact(width).zip(
-                img2[c]
-                    .chunks_exact(width)
-                    .zip(mu1[c].chunks_exact(width).zip(mu2[c].chunks_exact(width))),
-            ) {
-                for x in 0..width {
-                    let d1: f64 = (1.0 + f64::from((row2[x] - rowm2[x]).abs()))
-                        / (1.0 + f64::from((row1[x] - rowm1[x]).abs()))
-                        - 1.0;
-
-                    // d1 > 0: distorted has an edge where original is smooth
-                    //         (indicating ringing, color banding, blockiness, etc)
-                    let artifact = d1.max(0.0);
-                    sum1[0] += artifact;
-                    sum1[1] += artifact.powi(4);
-
-                    // d1 < 0: original has an edge where distorted is smooth
-                    //         (indicating smoothing, blurring, smearing, etc)
-                    let detail_lost = (-d1).max(0.0);
-                    sum1[2] += detail_lost;
-                    sum1[3] += detail_lost.powi(4);
-                }
-            }
-            plane_averages[c * 4] = one_per_pixels * sum1[0];
-            plane_averages[c * 4 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
-            plane_averages[c * 4 + 2] = one_per_pixels * sum1[2];
-            plane_averages[c * 4 + 3] = (one_per_pixels * sum1[3]).sqrt().sqrt();
+    match impl_type {
+        ComputeImpl::Scalar | ComputeImpl::Simd => {
+            edge_diff_map_scalar(width, height, img1, mu1, img2, mu2)
         }
-
-        plane_averages
+        #[cfg(feature = "unsafe-simd")]
+        ComputeImpl::UnsafeSimd => {
+            ssim_unsafe_simd::edge_diff_map_unsafe(width, height, img1, mu1, img2, mu2)
+        }
     }
+}
+
+fn edge_diff_map_scalar(
+    width: usize,
+    height: usize,
+    img1: &[Vec<f32>; 3],
+    mu1: &[Vec<f32>; 3],
+    img2: &[Vec<f32>; 3],
+    mu2: &[Vec<f32>; 3],
+) -> [f64; 3 * 4] {
+    let one_per_pixels = 1.0f64 / (width * height) as f64;
+    let mut plane_averages = [0f64; 3 * 4];
+
+    for c in 0..3 {
+        let mut sum1 = [0.0f64; 4];
+        for (row1, (row2, (rowm1, rowm2))) in img1[c].chunks_exact(width).zip(
+            img2[c]
+                .chunks_exact(width)
+                .zip(mu1[c].chunks_exact(width).zip(mu2[c].chunks_exact(width))),
+        ) {
+            for x in 0..width {
+                let d1: f64 = (1.0 + f64::from((row2[x] - rowm2[x]).abs()))
+                    / (1.0 + f64::from((row1[x] - rowm1[x]).abs()))
+                    - 1.0;
+
+                let artifact = d1.max(0.0);
+                sum1[0] += artifact;
+                sum1[1] += artifact.powi(4);
+
+                let detail_lost = (-d1).max(0.0);
+                sum1[2] += detail_lost;
+                sum1[3] += detail_lost.powi(4);
+            }
+        }
+        plane_averages[c * 4] = one_per_pixels * sum1[0];
+        plane_averages[c * 4 + 1] = (one_per_pixels * sum1[1]).sqrt().sqrt();
+        plane_averages[c * 4 + 2] = one_per_pixels * sum1[2];
+        plane_averages[c * 4 + 3] = (one_per_pixels * sum1[3]).sqrt().sqrt();
+    }
+
+    plane_averages
 }
 
 #[derive(Debug, Clone, Default)]
@@ -374,36 +476,6 @@ pub(crate) struct MsssimScale {
 }
 
 impl Msssim {
-    // The final score is based on a weighted sum of 108 sub-scores:
-    // - for 6 scales (1:1 to 1:32)
-    // - for 6 scales (1:1 to 1:32, downsampled in linear RGB)
-    // - for 3 components (X + 0.5, Y, B - Y + 1.0)
-    // - for 3 components (X, Y, B-Y, rescaled to 0..1 range)
-    // - using 2 norms (the 1-norm and the 4-norm)
-    // - using 2 norms (the 1-norm and the 4-norm)
-    // - over 3 error maps:
-    // - over 3 error maps:
-    //     - SSIM
-    //     - SSIM' (SSIM without the spurious gamma correction term)
-    //     - "ringing" (distorted edges where there are no orig edges)
-    //     - "ringing" (distorted edges where there are no orig edges)
-    //     - "blurring" (orig edges where there are no distorted edges)
-    //     - "blurring" (orig edges where there are no distorted edges)
-    // The weights were obtained by running Nelder-Mead simplex search,
-    // The weights were obtained by running Nelder-Mead simplex search,
-    // optimizing to minimize MSE and maximize Kendall and Pearson correlation
-    // optimizing to minimize MSE for the CID22 training set and to
-    // for training data consisting of 17611 subjective quality scores,
-    // maximize Kendall rank correlation (and with a lower weight,
-    // validated on separate validation data consisting of 4292 scores.
-    // also Pearson correlation) with the CID22 training set and the
-    // TID2013, Kadid10k and KonFiG-IQA datasets.
-    // Validation was done on the CID22 validation set.
-    // Final results after tuning (Kendall | Spearman | Pearson):
-    //    CID22:     0.6903 | 0.8805 | 0.8583
-    //    TID2013:   0.6590 | 0.8445 | 0.8471
-    //    KADID-10k: 0.6175 | 0.8133 | 0.8030
-    //    KonFiG(F): 0.7668 | 0.9194 | 0.9136
     #[allow(clippy::too_many_lines)]
     pub fn score(&self) -> f64 {
         const WEIGHT: [f64; 108] = [
@@ -607,8 +679,6 @@ mod tests {
         let result = compute_frame_ssimulacra2(source_data, distorted_data).unwrap();
         let expected = 17.398_505_f64;
         assert!(
-            // SOMETHING is WEIRD with Github CI where it gives different results across DIFFERENT
-            // RUNS
             (result - expected).abs() < 0.25f64,
             "Result {result:.6} not equal to expected {expected:.6}",
         );
@@ -618,7 +688,6 @@ mod tests {
     fn test_xyb_simd_vs_yuvxyb() {
         use yuvxyb::{ColorPrimaries, TransferCharacteristic};
 
-        // Test with the actual tank image to compare SIMD vs yuvxyb conversion
         let source = image::open(
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("test_data")
@@ -635,7 +704,6 @@ mod tests {
         let width = source.width() as usize;
         let height = source.height() as usize;
 
-        // Convert using yuvxyb's Xyb::from(LinearRgb) - the reference
         let rgb_for_yuvxyb = Rgb::new(
             source_data.clone(),
             width,
@@ -647,7 +715,6 @@ mod tests {
         let lrgb_for_yuvxyb = yuvxyb::LinearRgb::try_from(rgb_for_yuvxyb).unwrap();
         let xyb_yuvxyb = yuvxyb::Xyb::from(lrgb_for_yuvxyb);
 
-        // Convert using our SIMD path
         let rgb_for_simd = Rgb::new(
             source_data,
             width,
@@ -659,51 +726,14 @@ mod tests {
         let lrgb_for_simd = LinearRgb::try_from(rgb_for_simd).unwrap();
         let xyb_simd = linear_rgb_to_xyb_simd(lrgb_for_simd);
 
-        // Compare results
         let mut max_diff = [0.0f32; 3];
-        let mut sum_diff = [0.0f64; 3];
-        let mut diff_count = 0usize;
-
         for (yuvxyb_pix, simd_pix) in xyb_yuvxyb.data().iter().zip(xyb_simd.data().iter()) {
             for c in 0..3 {
                 let diff = (yuvxyb_pix[c] - simd_pix[c]).abs();
                 max_diff[c] = max_diff[c].max(diff);
-                sum_diff[c] += diff as f64;
-                if diff > 1e-6 {
-                    diff_count += 1;
-                }
             }
         }
 
-        let n = xyb_yuvxyb.data().len() as f64;
-        println!("XYB SIMD vs yuvxyb comparison:");
-        println!(
-            "  Max diff: X={:.2e}, Y={:.2e}, B={:.2e}",
-            max_diff[0], max_diff[1], max_diff[2]
-        );
-        println!(
-            "  Avg diff: X={:.2e}, Y={:.2e}, B={:.2e}",
-            sum_diff[0] / n,
-            sum_diff[1] / n,
-            sum_diff[2] / n
-        );
-        println!(
-            "  Pixels with diff > 1e-6: {} / {}",
-            diff_count,
-            xyb_yuvxyb.data().len()
-        );
-
-        // Sample a few pixels for detailed comparison
-        let sample_indices = [0, 1000, 10000, 100000, xyb_yuvxyb.data().len() - 1];
-        for &idx in &sample_indices {
-            if idx < xyb_yuvxyb.data().len() {
-                let y = xyb_yuvxyb.data()[idx];
-                let s = xyb_simd.data()[idx];
-                println!("  Pixel {}: yuvxyb={:?}, simd={:?}", idx, y, s);
-            }
-        }
-
-        // Fail if there's significant difference
         assert!(
             max_diff[0] < 1e-5 && max_diff[1] < 1e-5 && max_diff[2] < 1e-5,
             "SIMD XYB differs from yuvxyb: max_diff={:?}",

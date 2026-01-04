@@ -38,7 +38,8 @@
 use crate::blur::Blur;
 use crate::{
     downscale_by_2, edge_diff_map, image_multiply, linear_rgb_to_xyb_simd, make_positive_xyb,
-    ssim_map, xyb_to_planar, LinearRgb, Msssim, MsssimScale, Ssimulacra2Error, NUM_SCALES,
+    ssim_map, xyb_to_planar, ComputeImpl, LinearRgb, Msssim, MsssimScale, Ssimulacra2Error,
+    NUM_SCALES,
 };
 
 /// Precomputed reference data for a single scale.
@@ -212,6 +213,7 @@ impl Ssim2Reference {
                 &scale_data.sigma1_sq,
                 &sigma2_sq,
                 &sigma12,
+                ComputeImpl::default(),
             );
 
             let avg_edgediff = edge_diff_map(
@@ -221,6 +223,7 @@ impl Ssim2Reference {
                 &scale_data.mu1,
                 &img2_planar,
                 &mu2,
+                ComputeImpl::default(),
             );
 
             msssim.scales.push(MsssimScale {
