@@ -172,24 +172,25 @@ pub(crate) fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
     let out_w = (in_w + SCALE - 1) / SCALE;
     let out_h = (in_h + SCALE - 1) / SCALE;
     let mut out_data = vec![[0.0f32; 3]; out_w * out_h];
-    let normalize = 1f32 / (SCALE * SCALE) as f32;
 
     let in_data = &in_data.data();
     for oy in 0..out_h {
         for ox in 0..out_w {
             for c in 0..3 {
-                let mut sum = 0f32;
+                // Use f64 accumulator to reduce rounding errors
+                let mut sum = 0f64;
                 for iy in 0..SCALE {
                     for ix in 0..SCALE {
                         let x = (ox * SCALE + ix).min(in_w - 1);
                         let y = (oy * SCALE + iy).min(in_h - 1);
                         let in_pix = in_data[y * in_w + x];
 
-                        sum += in_pix[c];
+                        sum += f64::from(in_pix[c]);
                     }
                 }
                 let out_pix = &mut out_data[oy * out_w + ox];
-                out_pix[c] = sum * normalize;
+                // Divide directly instead of pre-computing multiplier
+                out_pix[c] = (sum / (SCALE * SCALE) as f64) as f32;
             }
         }
     }
@@ -238,12 +239,13 @@ pub(crate) fn ssim_map(
                 // perceptually uniform) or chroma (where weighing green more than red
                 // or blue more than yellow does not make any sense at all). So it is
                 // better to simply drop this denominator.
-                let num_m = mu_diff.mul_add(-mu_diff, 1.0f32);
-                let num_s = 2f32.mul_add(row_s12[x] - mu12, C2);
-                let denom_s = (row_s11[x] - mu11) + (row_s22[x] - mu22) + C2;
+                // Use f64 for SSIM computation to reduce rounding errors in uniform images
+                let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
+                let num_s = 2f64.mul_add(f64::from(row_s12[x] - mu12), f64::from(C2));
+                let denom_s = f64::from(row_s11[x] - mu11) + f64::from(row_s22[x] - mu22) + f64::from(C2);
                 // Use 1 - SSIM' so it becomes an error score instead of a quality
                 // index. This makes it make sense to compute an L_4 norm.
-                let mut d = 1.0f64 - f64::from((num_m * num_s) / denom_s);
+                let mut d = 1.0f64 - (num_m * num_s) / denom_s;
                 d = d.max(0.0);
                 sum1[0] += d;
                 sum1[1] += d.powi(4);

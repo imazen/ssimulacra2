@@ -125,6 +125,104 @@ impl TestImageGenerator {
         }
         data
     }
+
+    /// Apply 8x8 box blur distortion
+    fn box_blur_8x8(input: &[u8], width: usize, height: usize) -> Vec<u8> {
+        let mut output = vec![0u8; width * height * 3];
+        const KERNEL_SIZE: i32 = 8;
+        const HALF_KERNEL: i32 = KERNEL_SIZE / 2;
+
+        for y in 0..height {
+            for x in 0..width {
+                let mut sum = [0u32; 3];
+                let mut count = 0u32;
+
+                for ky in -HALF_KERNEL..HALF_KERNEL {
+                    for kx in -HALF_KERNEL..HALF_KERNEL {
+                        let ny = (y as i32 + ky).clamp(0, height as i32 - 1) as usize;
+                        let nx = (x as i32 + kx).clamp(0, width as i32 - 1) as usize;
+                        let idx = (ny * width + nx) * 3;
+                        sum[0] += input[idx] as u32;
+                        sum[1] += input[idx + 1] as u32;
+                        sum[2] += input[idx + 2] as u32;
+                        count += 1;
+                    }
+                }
+
+                let out_idx = (y * width + x) * 3;
+                output[out_idx] = (sum[0] / count) as u8;
+                output[out_idx + 1] = (sum[1] / count) as u8;
+                output[out_idx + 2] = (sum[2] / count) as u8;
+            }
+        }
+        output
+    }
+
+    /// Apply simple sharpen filter
+    fn sharpen(input: &[u8], width: usize, height: usize) -> Vec<u8> {
+        let mut output = vec![0u8; width * height * 3];
+        // Simple 3x3 sharpen kernel: [0 -1 0; -1 5 -1; 0 -1 0]
+        for y in 0..height {
+            for x in 0..width {
+                for c in 0..3 {
+                    let idx = (y * width + x) * 3 + c;
+                    let center = input[idx] as i32;
+
+                    let top = if y > 0 {
+                        input[((y - 1) * width + x) * 3 + c] as i32
+                    } else {
+                        center
+                    };
+                    let bottom = if y < height - 1 {
+                        input[((y + 1) * width + x) * 3 + c] as i32
+                    } else {
+                        center
+                    };
+                    let left = if x > 0 {
+                        input[(y * width + (x - 1)) * 3 + c] as i32
+                    } else {
+                        center
+                    };
+                    let right = if x < width - 1 {
+                        input[(y * width + (x + 1)) * 3 + c] as i32
+                    } else {
+                        center
+                    };
+
+                    let sharpened = 5 * center - top - bottom - left - right;
+                    output[idx] = sharpened.clamp(0, 255) as u8;
+                }
+            }
+        }
+        output
+    }
+
+    /// Apply RGB → YUV → RGB roundtrip (using simple BT.601 matrix)
+    fn yuv_roundtrip(input: &[u8], width: usize, height: usize) -> Vec<u8> {
+        let mut output = vec![0u8; width * height * 3];
+
+        for i in 0..width * height {
+            let idx = i * 3;
+            let r = input[idx] as f32;
+            let g = input[idx + 1] as f32;
+            let b = input[idx + 2] as f32;
+
+            // RGB → YUV (BT.601)
+            let y = 0.299 * r + 0.587 * g + 0.114 * b;
+            let u = -0.14713 * r - 0.28886 * g + 0.436 * b + 128.0;
+            let v = 0.615 * r - 0.51499 * g - 0.10001 * b + 128.0;
+
+            // YUV → RGB
+            let r_out = y + 1.13983 * (v - 128.0);
+            let g_out = y - 0.39465 * (u - 128.0) - 0.58060 * (v - 128.0);
+            let b_out = y + 2.03211 * (u - 128.0);
+
+            output[idx] = r_out.clamp(0.0, 255.0) as u8;
+            output[idx + 1] = g_out.clamp(0.0, 255.0) as u8;
+            output[idx + 2] = b_out.clamp(0.0, 255.0) as u8;
+        }
+        output
+    }
 }
 
 /// LCG pseudo-random number generator
@@ -342,6 +440,51 @@ fn generate_test_cases() -> Vec<TestCase> {
         height,
         noise,
         uniform,
+    ));
+
+    // Distortion tests: apply realistic image degradations
+    // Box blur 8x8
+    let source = TestImageGenerator::gradient_h(width, height);
+    let blurred = TestImageGenerator::box_blur_8x8(&source, width, height);
+    cases.push(TestCase::new(
+        format!("gradient_vs_boxblur8x8_{}x{}", width, height),
+        width,
+        height,
+        source,
+        blurred,
+    ));
+
+    // Sharpen filter
+    let source = TestImageGenerator::noise(width, height, 999);
+    let sharpened = TestImageGenerator::sharpen(&source, width, height);
+    cases.push(TestCase::new(
+        format!("noise_vs_sharpen_{}x{}", width, height),
+        width,
+        height,
+        source,
+        sharpened,
+    ));
+
+    // YUV roundtrip
+    let source = TestImageGenerator::gradient_diag(width, height);
+    let yuv_roundtrip = TestImageGenerator::yuv_roundtrip(&source, width, height);
+    cases.push(TestCase::new(
+        format!("gradient_vs_yuv_roundtrip_{}x{}", width, height),
+        width,
+        height,
+        source,
+        yuv_roundtrip,
+    ));
+
+    // Edge pattern with box blur
+    let source = TestImageGenerator::edge(width, height, true);
+    let blurred = TestImageGenerator::box_blur_8x8(&source, width, height);
+    cases.push(TestCase::new(
+        format!("edge_vs_boxblur8x8_{}x{}", width, height),
+        width,
+        height,
+        source,
+        blurred,
     ));
 
     cases
