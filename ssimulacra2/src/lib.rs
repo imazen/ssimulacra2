@@ -1,5 +1,6 @@
 mod blur;
 mod precompute;
+pub mod reference_data;
 
 pub use blur::Blur;
 pub use precompute::Ssim2Reference;
