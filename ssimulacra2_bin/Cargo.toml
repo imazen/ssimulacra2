@@ -37,7 +37,7 @@ optional = true
 [features]
 default = ["video", "avif"]
 video = ["av-metrics-decoders", "plotters", "statrs", "num-traits"]
-avif = ["image/avif-native"]
+avif = ["image/avif"]  # pure-Rust, no libdav1d dependency
 
 [lints.clippy]
 uninlined_format_args = "allow"
