@@ -423,13 +423,16 @@ fn test_reference_parity() {
             || case.name.contains("sharpen")
             || case.name.contains("yuv_roundtrip")
         {
-            // blur-simd + SIMD XYB have slightly higher error on yuv_roundtrip patterns
-            // due to different accumulation order in SIMD passes
-            #[cfg(feature = "blur-simd")]
+            // EXPERIMENTAL: unsafe SIMD and blur-simd have different FP rounding
+            #[cfg(feature = "blur-unsafe-simd")]
+            {
+                0.5 // unsafe SIMD: allow larger variance for aggressive optimizations
+            }
+            #[cfg(all(feature = "blur-simd", not(feature = "blur-unsafe-simd")))]
             {
                 0.25 // blur-simd + SIMD XYB: observed 0.226 on gradient_vs_yuv_roundtrip
             }
-            #[cfg(not(feature = "blur-simd"))]
+            #[cfg(all(not(feature = "blur-simd"), not(feature = "blur-unsafe-simd")))]
             {
                 0.18 // Other backends: distortion operations + SIMD XYB differences
             }

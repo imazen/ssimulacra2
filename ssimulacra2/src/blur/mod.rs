@@ -9,6 +9,9 @@ mod transpose_gaussian;
 #[cfg(feature = "blur-simd")]
 mod simd_gaussian;
 
+#[cfg(feature = "blur-unsafe-simd")]
+mod unsafe_simd_gaussian;
+
 use gaussian::RecursiveGaussian;
 
 #[cfg(feature = "inaccurate-libblur")]
@@ -19,6 +22,9 @@ use transpose_gaussian::TransposeGaussian;
 
 #[cfg(feature = "blur-simd")]
 use simd_gaussian::SimdGaussian;
+
+#[cfg(feature = "blur-unsafe-simd")]
+use unsafe_simd_gaussian::UnsafeSimdGaussian;
 
 /// Structure handling image blur.
 ///
@@ -36,13 +42,15 @@ pub struct Blur {
     #[cfg(all(
         not(feature = "inaccurate-libblur"),
         not(feature = "blur-transpose"),
-        not(feature = "blur-simd")
+        not(feature = "blur-simd"),
+        not(feature = "blur-unsafe-simd")
     ))]
     kernel: RecursiveGaussian,
     #[cfg(all(
         not(feature = "inaccurate-libblur"),
         not(feature = "blur-transpose"),
-        not(feature = "blur-simd")
+        not(feature = "blur-simd"),
+        not(feature = "blur-unsafe-simd")
     ))]
     temp: Vec<f32>,
     #[cfg(feature = "inaccurate-libblur")]
@@ -51,6 +59,8 @@ pub struct Blur {
     transpose: TransposeGaussian,
     #[cfg(feature = "blur-simd")]
     simd: SimdGaussian,
+    #[cfg(feature = "blur-unsafe-simd")]
+    unsafe_simd: UnsafeSimdGaussian,
     width: usize,
     height: usize,
 }
@@ -63,7 +73,8 @@ impl Blur {
         #[cfg(all(
             not(feature = "inaccurate-libblur"),
             not(feature = "blur-transpose"),
-            not(feature = "blur-simd")
+            not(feature = "blur-simd"),
+            not(feature = "blur-unsafe-simd")
         ))]
         {
             Blur {
@@ -97,6 +108,14 @@ impl Blur {
                 height,
             }
         }
+        #[cfg(feature = "blur-unsafe-simd")]
+        {
+            Blur {
+                unsafe_simd: UnsafeSimdGaussian::new(width),
+                width,
+                height,
+            }
+        }
     }
 
     /// Truncates the internal buffers to fit images of the given width and height.
@@ -107,7 +126,8 @@ impl Blur {
         #[cfg(all(
             not(feature = "inaccurate-libblur"),
             not(feature = "blur-transpose"),
-            not(feature = "blur-simd")
+            not(feature = "blur-simd"),
+            not(feature = "blur-unsafe-simd")
         ))]
         {
             self.temp.truncate(width * height);
@@ -123,6 +143,10 @@ impl Blur {
         #[cfg(feature = "blur-simd")]
         {
             self.simd.shrink_to(width, height);
+        }
+        #[cfg(feature = "blur-unsafe-simd")]
+        {
+            self.unsafe_simd.shrink_to(width, height);
         }
         self.width = width;
         self.height = height;
@@ -140,7 +164,8 @@ impl Blur {
     #[cfg(all(
         not(feature = "inaccurate-libblur"),
         not(feature = "blur-transpose"),
-        not(feature = "blur-simd")
+        not(feature = "blur-simd"),
+        not(feature = "blur-unsafe-simd")
     ))]
     fn blur_plane(&mut self, plane: &[f32]) -> Vec<f32> {
         let mut out = vec![0f32; self.width * self.height];
@@ -165,5 +190,11 @@ impl Blur {
     #[cfg(feature = "blur-simd")]
     fn blur_plane(&mut self, plane: &[f32]) -> Vec<f32> {
         self.simd.blur_single_plane(plane, self.width, self.height)
+    }
+
+    #[cfg(feature = "blur-unsafe-simd")]
+    fn blur_plane(&mut self, plane: &[f32]) -> Vec<f32> {
+        self.unsafe_simd
+            .blur_single_plane(plane, self.width, self.height)
     }
 }

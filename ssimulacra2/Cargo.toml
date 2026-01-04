@@ -39,6 +39,7 @@ rayon = ["dep:rayon"]  # Multi-threading (only beneficial for very large images 
 blur-accurate = []  # Baseline: f64 IIR (slower, 0.955 max error vs C++)
 blur-transpose = []  # f32 IIR transpose (0.926 max error, slower than blur-simd)
 blur-simd = ["wide", "multiversion"]  # SIMD blur (2.4x faster than transpose, 1.24 max error)
+blur-unsafe-simd = ["multiversion"]  # EXPERIMENTAL: Raw x86 intrinsics (AVX2/AVX-512, unsafe)
 inaccurate-libblur = ["libblur"]  # Different blur algorithm - see src/blur/LIBBLUR_NOTE.md
 simd-ops = ["wide", "multiversion"]  # SIMD compute pipeline (minimal gain on typical images)
 

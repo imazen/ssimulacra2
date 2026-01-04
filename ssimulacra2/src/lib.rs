@@ -3,6 +3,7 @@ mod precompute;
 pub mod reference_data;
 #[cfg(feature = "simd-ops")]
 pub mod simd_ops;
+#[cfg(any(feature = "blur-simd", feature = "simd-ops"))]
 mod xyb_simd;
 
 pub use blur::Blur;
@@ -125,7 +126,8 @@ where
     Ok(msssim.score())
 }
 
-/// Convert LinearRgb to Xyb using SIMD optimizations
+/// Convert LinearRgb to Xyb using SIMD optimizations (when available)
+#[cfg(any(feature = "blur-simd", feature = "simd-ops"))]
 pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
     let width = linear_rgb.width();
     let height = linear_rgb.height();
@@ -133,6 +135,13 @@ pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
     let mut data = linear_rgb.into_data();
     xyb_simd::linear_rgb_to_xyb_simd(&mut data);
     Xyb::new(data, width, height).expect("XYB construction should not fail with correct dimensions")
+}
+
+/// Scalar fallback for XYB conversion
+#[cfg(not(any(feature = "blur-simd", feature = "simd-ops")))]
+pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
+    // Use yuvxyb's native conversion (non-SIMD)
+    Xyb::try_from(linear_rgb).expect("XYB conversion should not fail")
 }
 
 // Get all components in more or less 0..1 range
