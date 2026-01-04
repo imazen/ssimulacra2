@@ -1,7 +1,9 @@
 /// SIMD-optimized Recursive Gaussian using `wide` crate
 ///
-/// This implementation uses portable SIMD (wide::f32x4) to process
-/// multiple columns simultaneously in the vertical pass.
+/// Uses f32x4 (SSE2, 128-bit SIMD) to process 4 columns simultaneously
+/// in the vertical pass. This is the fastest configuration on most CPUs.
+
+use wide::f32x4;
 
 mod consts {
     #![allow(clippy::unreadable_literal)]
@@ -9,7 +11,6 @@ mod consts {
 }
 
 use multiversion::multiversion;
-use wide::f32x4;
 
 pub struct SimdGaussian {
     // Pre-allocated buffers for vertical pass (avoids allocations)
@@ -20,7 +21,7 @@ pub struct SimdGaussian {
 
 impl SimdGaussian {
     pub fn new(_max_width: usize) -> Self {
-        // Allocate for max columns we'll process (128 for now)
+        // Allocate for max columns we'll process (128 columns = 32 SIMD lanes of 4)
         const MAX_COLUMNS: usize = 128;
         Self {
             prev_buffer: vec![0.0; 3 * MAX_COLUMNS],
@@ -165,6 +166,20 @@ impl SimdGaussian {
             x += 32;
         }
 
+        // Process 4 columns at a time (1 SIMD lane of 4)
+        while x + 4 <= width {
+            Self::vertical_pass_simd::<4>(
+                &input[x..],
+                &mut output[x..],
+                width,
+                height,
+                &mut self.prev_buffer[..3 * 4],
+                &mut self.prev2_buffer[..3 * 4],
+                &mut self.out_buffer[..3 * 4],
+            );
+            x += 4;
+        }
+
         // Handle remaining columns with scalar version
         while x < width {
             self.vertical_pass_scalar::<1>(&input[x..], &mut output[x..], width, height);
@@ -198,7 +213,7 @@ impl SimdGaussian {
         prev2.fill(0.0);
         out.fill(0.0);
 
-        let zeroes = f32x4::ZERO;
+        let zeroes = f32x4::splat(0.0);
 
         // Splat constants for SIMD operations
         let mul_in_1 = f32x4::splat(consts::VERT_MUL_IN_1);
@@ -220,24 +235,14 @@ impl SimdGaussian {
                 // Load 4 values from top and bottom rows
                 let top_vals = if top >= 0 && (top as usize * width + i + 3) < input.len() {
                     let idx = top as usize * width + i;
-                    f32x4::new([
-                        input[idx],
-                        input[idx + 1],
-                        input[idx + 2],
-                        input[idx + 3],
-                    ])
+                    f32x4::new([input[idx], input[idx+1], input[idx+2], input[idx+3]])
                 } else {
                     zeroes
                 };
 
                 let bottom_vals = if bottom >= 0 && (bottom as usize * width + i + 3) < input.len() {
                     let idx = bottom as usize * width + i;
-                    f32x4::new([
-                        input[idx],
-                        input[idx + 1],
-                        input[idx + 2],
-                        input[idx + 3],
-                    ])
+                    f32x4::new([input[idx], input[idx+1], input[idx+2], input[idx+3]])
                 } else {
                     zeroes
                 };
@@ -249,25 +254,13 @@ impl SimdGaussian {
                 let i3 = i1 + COLUMNS;
                 let i5 = i3 + COLUMNS;
 
-                let prev_1_vec = f32x4::new([
-                    prev[i1], prev[i1+1], prev[i1+2], prev[i1+3]
-                ]);
-                let prev_3_vec = f32x4::new([
-                    prev[i3], prev[i3+1], prev[i3+2], prev[i3+3]
-                ]);
-                let prev_5_vec = f32x4::new([
-                    prev[i5], prev[i5+1], prev[i5+2], prev[i5+3]
-                ]);
+                let prev_1_vec = f32x4::new([prev[i1], prev[i1+1], prev[i1+2], prev[i1+3]]);
+                let prev_3_vec = f32x4::new([prev[i3], prev[i3+1], prev[i3+2], prev[i3+3]]);
+                let prev_5_vec = f32x4::new([prev[i5], prev[i5+1], prev[i5+2], prev[i5+3]]);
 
-                let prev2_1_vec = f32x4::new([
-                    prev2[i1], prev2[i1+1], prev2[i1+2], prev2[i1+3]
-                ]);
-                let prev2_3_vec = f32x4::new([
-                    prev2[i3], prev2[i3+1], prev2[i3+2], prev2[i3+3]
-                ]);
-                let prev2_5_vec = f32x4::new([
-                    prev2[i5], prev2[i5+1], prev2[i5+2], prev2[i5+3]
-                ]);
+                let prev2_1_vec = f32x4::new([prev2[i1], prev2[i1+1], prev2[i1+2], prev2[i1+3]]);
+                let prev2_3_vec = f32x4::new([prev2[i3], prev2[i3+1], prev2[i3+2], prev2[i3+3]]);
+                let prev2_5_vec = f32x4::new([prev2[i5], prev2[i5+1], prev2[i5+2], prev2[i5+3]]);
 
                 // SIMD computation of IIR filter
                 let out1 = prev_1_vec.mul_add(mul_prev_1, prev2_1_vec);
