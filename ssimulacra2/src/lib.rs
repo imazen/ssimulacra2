@@ -3,6 +3,7 @@ mod precompute;
 pub mod reference_data;
 #[cfg(feature = "simd-ops")]
 pub mod simd_ops;
+mod xyb_simd;
 
 pub use blur::Blur;
 pub use precompute::Ssim2Reference;
@@ -90,8 +91,8 @@ where
         }
         blur.shrink_to(width, height);
 
-        let mut img1 = Xyb::from(img1.clone());
-        let mut img2 = Xyb::from(img2.clone());
+        let mut img1 = linear_rgb_to_xyb_simd(img1.clone());
+        let mut img2 = linear_rgb_to_xyb_simd(img2.clone());
 
         make_positive_xyb(&mut img1);
         make_positive_xyb(&mut img2);
@@ -122,6 +123,17 @@ where
     }
 
     Ok(msssim.score())
+}
+
+/// Convert LinearRgb to Xyb using SIMD optimizations
+fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
+    let width = linear_rgb.width();
+    let height = linear_rgb.height();
+    // Take ownership of the data and convert in-place (no clone!)
+    let mut data = linear_rgb.into_data();
+    xyb_simd::linear_rgb_to_xyb_simd(&mut data);
+    Xyb::new(data, width, height)
+        .expect("XYB construction should not fail with correct dimensions")
 }
 
 // Get all components in more or less 0..1 range
