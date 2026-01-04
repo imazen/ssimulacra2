@@ -2,7 +2,7 @@ mod blur;
 mod precompute;
 pub mod reference_data;
 #[cfg(feature = "simd-ops")]
-mod simd_ops;
+pub mod simd_ops;
 
 pub use blur::Blur;
 pub use precompute::Ssim2Reference;

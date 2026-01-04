@@ -13,7 +13,7 @@ use wide::f32x4;
 #[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub(crate) fn ssim_map_simd(
+pub fn ssim_map_simd(
     width: usize,
     height: usize,
     m1: &[Vec<f32>; 3],
@@ -115,7 +115,7 @@ pub(crate) fn ssim_map_simd(
 #[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub(crate) fn edge_diff_map_simd(
+pub fn edge_diff_map_simd(
     width: usize,
     height: usize,
     img1: &[Vec<f32>; 3],
@@ -202,7 +202,7 @@ pub(crate) fn edge_diff_map_simd(
 #[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub(crate) fn image_multiply_simd(
+pub fn image_multiply_simd(
     img1: &[Vec<f32>; 3],
     img2: &[Vec<f32>; 3],
     out: &mut [Vec<f32>; 3],
@@ -240,7 +240,7 @@ pub(crate) fn image_multiply_simd(
 #[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub(crate) fn xyb_to_planar_simd(data: &[[f32; 3]], width: usize, height: usize) -> [Vec<f32>; 3] {
+pub fn xyb_to_planar_simd(data: &[[f32; 3]], width: usize, height: usize) -> [Vec<f32>; 3] {
     let len = width * height;
     let mut out0 = vec![0.0f32; len];
     let mut out1 = vec![0.0f32; len];
