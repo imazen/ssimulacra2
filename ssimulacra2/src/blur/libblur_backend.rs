@@ -3,9 +3,9 @@
 /// Based on PR #28 by gembleman: ~5-6x faster but 0.001-1.1% accuracy loss
 use crate::Ssimulacra2Error;
 
-#[cfg(feature = "blur-libblur")]
+#[cfg(feature = "inaccurate-libblur")]
 use libblur::{BlurImage, BlurImageMut, EdgeMode, FastBlurChannels, ThreadingPolicy};
-#[cfg(feature = "blur-libblur")]
+#[cfg(feature = "inaccurate-libblur")]
 use std::borrow::Cow;
 
 pub struct LibblurBackend {
@@ -23,7 +23,7 @@ impl LibblurBackend {
         self.height = height;
     }
 
-    #[cfg(feature = "blur-libblur")]
+    #[cfg(feature = "inaccurate-libblur")]
     pub fn blur_plane(&mut self, plane: &[f32]) -> Result<Vec<f32>, Ssimulacra2Error> {
         // Tuning sigma to match C++ reference (which uses Charalampidis, not standard Gaussian)
         const KERNEL_SIZE: u32 = 11;
@@ -64,7 +64,7 @@ impl LibblurBackend {
         Ok(out)
     }
 
-    #[cfg(not(feature = "blur-libblur"))]
+    #[cfg(not(feature = "inaccurate-libblur"))]
     pub fn blur_plane(&mut self, _plane: &[f32]) -> Result<Vec<f32>, Ssimulacra2Error> {
         unreachable!("libblur backend not compiled")
     }
