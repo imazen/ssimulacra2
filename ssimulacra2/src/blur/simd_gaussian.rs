@@ -69,6 +69,7 @@ impl SimdGaussian {
         }
     }
 
+    #[inline(always)]
     #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
     fn horizontal_row(input: &[f32], output: &mut [f32], width: usize) {
         let big_n = consts::RADIUS as isize;
@@ -172,6 +173,7 @@ impl SimdGaussian {
     }
 
     /// SIMD vertical pass - processes COLUMNS columns (must be multiple of 4)
+    #[inline(always)]
     #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
     fn vertical_pass_simd<const COLUMNS: usize>(
         input: &[f32],

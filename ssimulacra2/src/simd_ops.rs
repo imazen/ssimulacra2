@@ -11,6 +11,7 @@ use wide::f32x4;
 ///
 /// Processes 4 pixels at once using f32x4, then accumulates in f64 for precision
 #[cfg(feature = "simd-ops")]
+#[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub(crate) fn ssim_map_simd(
     width: usize,
@@ -112,6 +113,7 @@ pub(crate) fn ssim_map_simd(
 
 /// SIMD-optimized edge difference map computation
 #[cfg(feature = "simd-ops")]
+#[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub(crate) fn edge_diff_map_simd(
     width: usize,
@@ -198,6 +200,7 @@ pub(crate) fn edge_diff_map_simd(
 
 /// SIMD-optimized image multiplication
 #[cfg(feature = "simd-ops")]
+#[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub(crate) fn image_multiply_simd(
     img1: &[Vec<f32>; 3],
@@ -235,6 +238,7 @@ pub(crate) fn image_multiply_simd(
 
 /// SIMD-optimized deinterleave from [[f32; 3]] to [Vec<f32>; 3]
 #[cfg(feature = "simd-ops")]
+#[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub(crate) fn xyb_to_planar_simd(data: &[[f32; 3]], width: usize, height: usize) -> [Vec<f32>; 3] {
     let len = width * height;
