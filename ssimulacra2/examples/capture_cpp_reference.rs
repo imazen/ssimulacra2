@@ -12,6 +12,7 @@
 //! Usage:
 //!   SSIMULACRA2_BIN=/path/to/ssimulacra2 cargo run --release --example capture_cpp_reference
 
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
@@ -200,6 +201,30 @@ struct TestCase {
     height: usize,
     source_data: Vec<u8>,
     distorted_data: Vec<u8>,
+    source_hash: String,
+    distorted_hash: String,
+}
+
+impl TestCase {
+    fn new(
+        name: String,
+        width: usize,
+        height: usize,
+        source_data: Vec<u8>,
+        distorted_data: Vec<u8>,
+    ) -> Self {
+        let source_hash = format!("{:x}", Sha256::digest(&source_data));
+        let distorted_hash = format!("{:x}", Sha256::digest(&distorted_data));
+        Self {
+            name,
+            width,
+            height,
+            source_data,
+            distorted_data,
+            source_hash,
+            distorted_hash,
+        }
+    }
 }
 
 /// Generate all test cases
@@ -212,13 +237,13 @@ fn generate_test_cases() -> Vec<TestCase> {
     for (width, height) in sizes {
         // Perfect match (should score 100)
         let data = TestImageGenerator::uniform(width, height, 128, 128, 128);
-        cases.push(TestCase {
-            name: format!("perfect_match_{}x{}", width, height),
+        cases.push(TestCase::new(
+            format!("perfect_match_{}x{}", width, height),
             width,
             height,
-            source_data: data.clone(),
-            distorted_data: data,
-        });
+            data.clone(),
+            data,
+        ));
 
         // Uniform colors with slight shift
         for shift in [1, 5, 10, 20, 50] {
@@ -230,67 +255,67 @@ fn generate_test_cases() -> Vec<TestCase> {
                 128 + shift,
                 128 + shift,
             );
-            cases.push(TestCase {
-                name: format!("uniform_shift_{}_{}x{}", shift, width, height),
+            cases.push(TestCase::new(
+                format!("uniform_shift_{}_{}x{}", shift, width, height),
                 width,
                 height,
-                source_data: source,
-                distorted_data: distorted,
-            });
+                source,
+                distorted,
+            ));
         }
 
         // Gradients (identical = should score high)
         let grad_h = TestImageGenerator::gradient_h(width, height);
-        cases.push(TestCase {
-            name: format!("gradient_h_{}x{}", width, height),
+        cases.push(TestCase::new(
+            format!("gradient_h_{}x{}", width, height),
             width,
             height,
-            source_data: grad_h.clone(),
-            distorted_data: grad_h,
-        });
+            grad_h.clone(),
+            grad_h,
+        ));
 
         let grad_v = TestImageGenerator::gradient_v(width, height);
-        cases.push(TestCase {
-            name: format!("gradient_v_{}x{}", width, height),
+        cases.push(TestCase::new(
+            format!("gradient_v_{}x{}", width, height),
             width,
             height,
-            source_data: grad_v.clone(),
-            distorted_data: grad_v,
-        });
+            grad_v.clone(),
+            grad_v,
+        ));
 
         // Checkerboard (identical)
         for cell_size in [4, 8, 16] {
             let checker = TestImageGenerator::checkerboard(width, height, cell_size);
-            cases.push(TestCase {
-                name: format!("checkerboard_{}_{}x{}", cell_size, width, height),
+            cases.push(TestCase::new(
+                format!("checkerboard_{}_{}x{}", cell_size, width, height),
                 width,
                 height,
-                source_data: checker.clone(),
-                distorted_data: checker,
-            });
+                checker.clone(),
+                checker,
+            ));
         }
 
         // Random noise (identical)
         for seed in [42, 123, 999] {
             let noise = TestImageGenerator::noise(width, height, seed);
-            cases.push(TestCase {
-                name: format!("noise_seed_{}_{}x{}", seed, width, height),
+            cases.push(TestCase::new(
+                format!("noise_seed_{}_{}x{}", seed, width, height),
                 width,
                 height,
-                source_data: noise.clone(),
-                distorted_data: noise,
-            });
+                noise.clone(),
+                noise,
+            ));
         }
 
         // Edges (identical)
         let edge_v = TestImageGenerator::edge(width, height, true);
-        cases.push(TestCase {
-            name: format!("edge_vertical_{}x{}", width, height),
+        cases.push(TestCase::new(
+            format!("edge_vertical_{}x{}", width, height),
             width,
             height,
-            source_data: edge_v.clone(),
-            distorted_data: edge_v,
-        });
+            edge_v.clone(),
+            edge_v,
+        ));
     }
 
     // Only for smallest size: test distorted vs source
@@ -300,24 +325,24 @@ fn generate_test_cases() -> Vec<TestCase> {
     // Gradient vs uniform
     let grad = TestImageGenerator::gradient_h(width, height);
     let uniform = TestImageGenerator::uniform(width, height, 128, 128, 128);
-    cases.push(TestCase {
-        name: format!("gradient_vs_uniform_{}x{}", width, height),
+    cases.push(TestCase::new(
+        format!("gradient_vs_uniform_{}x{}", width, height),
         width,
         height,
-        source_data: grad,
-        distorted_data: uniform,
-    });
+        grad,
+        uniform,
+    ));
 
     // Noise vs uniform
     let noise = TestImageGenerator::noise(width, height, 42);
     let uniform = TestImageGenerator::uniform(width, height, 128, 128, 128);
-    cases.push(TestCase {
-        name: format!("noise_vs_uniform_{}x{}", width, height),
+    cases.push(TestCase::new(
+        format!("noise_vs_uniform_{}x{}", width, height),
         width,
         height,
-        source_data: noise,
-        distorted_data: uniform,
-    });
+        noise,
+        uniform,
+    ));
 
     cases
 }
@@ -365,7 +390,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match call_cpp_ssimulacra2(&bin_path, &source_path, &distorted_path) {
             Ok(score) => {
                 println!("score = {:.15}", score);
-                reference_cases.push((case.name.clone(), case.width, case.height, score));
+                reference_cases.push((
+                    case.name.clone(),
+                    case.width,
+                    case.height,
+                    score,
+                    case.source_hash.clone(),
+                    case.distorted_hash.clone(),
+                ));
             }
             Err(e) => {
                 println!("FAILED: {}", e);
@@ -387,7 +419,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn generate_reference_file(cases: &[(String, usize, usize, f64)]) -> std::io::Result<()> {
+fn generate_reference_file(
+    cases: &[(String, usize, usize, f64, String, String)],
+) -> std::io::Result<()> {
     let output_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/reference_data.rs");
     let mut f = File::create(&output_path)?;
 
@@ -417,17 +451,29 @@ fn generate_reference_file(cases: &[(String, usize, usize, f64)]) -> std::io::Re
     writeln!(f, "    pub width: usize,")?;
     writeln!(f, "    pub height: usize,")?;
     writeln!(f, "    pub expected_score: f64,")?;
+    writeln!(
+        f,
+        "    /// SHA256 hash of source image raw RGB data (for detecting generation changes)"
+    )?;
+    writeln!(f, "    pub source_hash: &'static str,")?;
+    writeln!(
+        f,
+        "    /// SHA256 hash of distorted image raw RGB data (for detecting generation changes)"
+    )?;
+    writeln!(f, "    pub distorted_hash: &'static str,")?;
     writeln!(f, "}}")?;
     writeln!(f)?;
     writeln!(f, "/// All reference test cases.")?;
     writeln!(f, "pub const REFERENCE_CASES: &[ReferenceCase] = &[")?;
 
-    for (name, width, height, score) in cases {
+    for (name, width, height, score, source_hash, distorted_hash) in cases {
         writeln!(f, "    ReferenceCase {{")?;
         writeln!(f, "        name: \"{}\",", name)?;
         writeln!(f, "        width: {},", width)?;
         writeln!(f, "        height: {},", height)?;
         writeln!(f, "        expected_score: {:.15},", score)?;
+        writeln!(f, "        source_hash: \"{}\",", source_hash)?;
+        writeln!(f, "        distorted_hash: \"{}\",", distorted_hash)?;
         writeln!(f, "    }},")?;
     }
 
