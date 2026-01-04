@@ -14,9 +14,11 @@ rust-version = "1.65.0"
 
 [dependencies]
 libblur = { version = "0.17", optional = true }
+multiversion = { version = "0.7", optional = true }
 num-traits = "0.2.15"
 rayon = { version = "1.5.3", optional = true }
 thiserror = "2.0.9"
+wide = { version = "0.7", optional = true }
 yuvxyb = "0.4.1"
 
 [build-dependencies.yuvxyb-math]
@@ -35,7 +37,9 @@ sha2 = "0.10"
 default = ["rayon", "blur-transpose"]
 blur-accurate = []  # Baseline: f64 IIR (slower, 0.955 max error vs C++)
 blur-transpose = []  # Default: f32 IIR transpose (~4x faster, 0.926 max error)
-blur-libblur = ["libblur"]  # NOT RECOMMENDED: incompatible algorithm (1000x error)
+blur-simd = ["wide", "multiversion"]  # SIMD optimized (~3.6x faster, 1.24 max error)
+inaccurate-libblur = ["libblur"]  # Different blur algorithm - see src/blur/LIBBLUR_NOTE.md
+simd-ops = ["wide", "multiversion"]  # SIMD-optimized compute pipeline (ssim_map, edge_diff_map, etc.)
 
 [[bench]]
 name = "benches"

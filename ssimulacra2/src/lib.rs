@@ -1,6 +1,8 @@
 mod blur;
 mod precompute;
 pub mod reference_data;
+#[cfg(feature = "simd-ops")]
+mod simd_ops;
 
 pub use blur::Blur;
 pub use precompute::Ssim2Reference;
@@ -162,9 +164,17 @@ pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
 }
 
 pub(crate) fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
-    for ((plane1, plane2), out_plane) in img1.iter().zip(img2.iter()).zip(out.iter_mut()) {
-        for ((&p1, &p2), o) in plane1.iter().zip(plane2.iter()).zip(out_plane.iter_mut()) {
-            *o = p1 * p2;
+    #[cfg(feature = "simd-ops")]
+    {
+        simd_ops::image_multiply_simd(img1, img2, out);
+    }
+
+    #[cfg(not(feature = "simd-ops"))]
+    {
+        for ((plane1, plane2), out_plane) in img1.iter().zip(img2.iter()).zip(out.iter_mut()) {
+            for ((&p1, &p2), o) in plane1.iter().zip(plane2.iter()).zip(out_plane.iter_mut()) {
+                *o = p1 * p2;
+            }
         }
     }
 }
@@ -211,6 +221,13 @@ pub(crate) fn ssim_map(
     s22: &[Vec<f32>; 3],
     s12: &[Vec<f32>; 3],
 ) -> [f64; 3 * 2] {
+    #[cfg(feature = "simd-ops")]
+    {
+        return simd_ops::ssim_map_simd(width, height, m1, m2, s11, s22, s12);
+    }
+
+    #[cfg(not(feature = "simd-ops"))]
+    {
     const C2: f32 = 0.0009f32;
 
     let one_per_pixels = 1.0f64 / (width * height) as f64;
@@ -261,6 +278,7 @@ pub(crate) fn ssim_map(
     }
 
     plane_averages
+    }
 }
 
 pub(crate) fn edge_diff_map(
@@ -271,6 +289,13 @@ pub(crate) fn edge_diff_map(
     img2: &[Vec<f32>; 3],
     mu2: &[Vec<f32>; 3],
 ) -> [f64; 3 * 4] {
+    #[cfg(feature = "simd-ops")]
+    {
+        return simd_ops::edge_diff_map_simd(width, height, img1, mu1, img2, mu2);
+    }
+
+    #[cfg(not(feature = "simd-ops"))]
+    {
     let one_per_pixels = 1.0f64 / (width * height) as f64;
     let mut plane_averages = [0f64; 3 * 4];
 
@@ -306,6 +331,7 @@ pub(crate) fn edge_diff_map(
     }
 
     plane_averages
+    }
 }
 
 #[derive(Debug, Clone, Default)]
