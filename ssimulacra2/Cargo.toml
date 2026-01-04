@@ -34,12 +34,13 @@ which = "7.0"
 sha2 = "0.10"
 
 [features]
-default = ["rayon", "blur-transpose"]
+default = ["blur-simd"]  # Fast SIMD blur (2.4x faster, 1.24 max error, 0.20 on YUV patterns)
+rayon = ["dep:rayon"]  # Multi-threading (only beneficial for very large images >2K)
 blur-accurate = []  # Baseline: f64 IIR (slower, 0.955 max error vs C++)
-blur-transpose = []  # Default: f32 IIR transpose (~4x faster, 0.926 max error)
-blur-simd = ["wide", "multiversion"]  # SIMD blur (~3.6x faster, 1.24 max error, 0.20 on YUV patterns)
+blur-transpose = []  # f32 IIR transpose (0.926 max error, slower than blur-simd)
+blur-simd = ["wide", "multiversion"]  # SIMD blur (2.4x faster than transpose, 1.24 max error)
 inaccurate-libblur = ["libblur"]  # Different blur algorithm - see src/blur/LIBBLUR_NOTE.md
-simd-ops = ["wide", "multiversion"]  # SIMD-optimized compute pipeline (ssim_map, edge_diff_map, etc.)
+simd-ops = ["wide", "multiversion"]  # SIMD compute pipeline (minimal gain on typical images)
 
 [[bench]]
 name = "benches"
