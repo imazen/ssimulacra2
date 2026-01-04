@@ -246,28 +246,26 @@ pub(crate) fn xyb_to_planar_simd(data: &[[f32; 3]], width: usize, height: usize)
 
     // Process 4 pixels at once
     while i + 4 <= len {
-        // Deinterleave 4 pixels directly
-        unsafe {
-            let p0 = *data.get_unchecked(i);
-            let p1 = *data.get_unchecked(i + 1);
-            let p2 = *data.get_unchecked(i + 2);
-            let p3 = *data.get_unchecked(i + 3);
+        // Deinterleave 4 pixels directly - safe version (compiler should elide bounds checks)
+        let p0 = data[i];
+        let p1 = data[i + 1];
+        let p2 = data[i + 2];
+        let p3 = data[i + 3];
 
-            *out0.get_unchecked_mut(i) = p0[0];
-            *out0.get_unchecked_mut(i + 1) = p1[0];
-            *out0.get_unchecked_mut(i + 2) = p2[0];
-            *out0.get_unchecked_mut(i + 3) = p3[0];
+        out0[i] = p0[0];
+        out0[i + 1] = p1[0];
+        out0[i + 2] = p2[0];
+        out0[i + 3] = p3[0];
 
-            *out1.get_unchecked_mut(i) = p0[1];
-            *out1.get_unchecked_mut(i + 1) = p1[1];
-            *out1.get_unchecked_mut(i + 2) = p2[1];
-            *out1.get_unchecked_mut(i + 3) = p3[1];
+        out1[i] = p0[1];
+        out1[i + 1] = p1[1];
+        out1[i + 2] = p2[1];
+        out1[i + 3] = p3[1];
 
-            *out2.get_unchecked_mut(i) = p0[2];
-            *out2.get_unchecked_mut(i + 1) = p1[2];
-            *out2.get_unchecked_mut(i + 2) = p2[2];
-            *out2.get_unchecked_mut(i + 3) = p3[2];
-        }
+        out2[i] = p0[2];
+        out2[i + 1] = p1[2];
+        out2[i + 2] = p2[2];
+        out2[i + 3] = p3[2];
 
         i += 4;
     }

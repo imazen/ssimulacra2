@@ -85,13 +85,13 @@ impl SimdGaussian {
         while n < width as isize {
             let left = n - big_n - 1;
             let right = n + big_n - 1;
-            let left_val = if left >= 0 {
-                unsafe { *input.get_unchecked(left as usize) }
+            let left_val = if left >= 0 && (left as usize) < input.len() {
+                input[left as usize]
             } else {
                 0f32
             };
-            let right_val = if right < width as isize {
-                unsafe { *input.get_unchecked(right as usize) }
+            let right_val = if right >= 0 && (right as usize) < input.len() {
+                input[right as usize]
             } else {
                 0f32
             };
@@ -115,10 +115,8 @@ impl SimdGaussian {
             prev_3 = out_3;
             prev_5 = out_5;
 
-            if n >= 0 {
-                unsafe {
-                    *output.get_unchecked_mut(n as usize) = out_1 + out_3 + out_5;
-                }
+            if n >= 0 && (n as usize) < output.len() {
+                output[n as usize] = out_1 + out_3 + out_5;
             }
 
             n += 1;
@@ -218,23 +216,25 @@ impl SimdGaussian {
                 let i = lane * 4;
 
                 // Load 4 values from top and bottom rows
-                let top_vals = if top >= 0 {
+                let top_vals = if top >= 0 && (top as usize * width + i + 3) < input.len() {
+                    let idx = top as usize * width + i;
                     f32x4::new([
-                        unsafe { *input.get_unchecked(top as usize * width + i) },
-                        unsafe { *input.get_unchecked(top as usize * width + i + 1) },
-                        unsafe { *input.get_unchecked(top as usize * width + i + 2) },
-                        unsafe { *input.get_unchecked(top as usize * width + i + 3) },
+                        input[idx],
+                        input[idx + 1],
+                        input[idx + 2],
+                        input[idx + 3],
                     ])
                 } else {
                     zeroes
                 };
 
-                let bottom_vals = if bottom < height as isize {
+                let bottom_vals = if bottom >= 0 && (bottom as usize * width + i + 3) < input.len() {
+                    let idx = bottom as usize * width + i;
                     f32x4::new([
-                        unsafe { *input.get_unchecked(bottom as usize * width + i) },
-                        unsafe { *input.get_unchecked(bottom as usize * width + i + 1) },
-                        unsafe { *input.get_unchecked(bottom as usize * width + i + 2) },
-                        unsafe { *input.get_unchecked(bottom as usize * width + i + 3) },
+                        input[idx],
+                        input[idx + 1],
+                        input[idx + 2],
+                        input[idx + 3],
                     ])
                 } else {
                     zeroes
