@@ -279,6 +279,11 @@ pub(crate) fn make_positive_xyb(xyb: &mut Xyb) {
     }
 }
 
+// Note: make_positive_xyb doesn't benefit much from AVX2 due to complex RGB3 deinterleaving
+// The scalar version is already well-optimized by the compiler
+
+// Note: xyb_to_planar doesn't benefit much from AVX2 due to complex RGB3 deinterleaving
+// The scalar version is already well-optimized by the compiler
 pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
     let mut out1 = vec![0.0f32; xyb.width() * xyb.height()];
     let mut out2 = vec![0.0f32; xyb.width() * xyb.height()];
@@ -299,9 +304,47 @@ pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
 }
 
 pub(crate) fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
+    #[cfg(all(feature = "unsafe-simd", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe { image_multiply_avx2(img1, img2, out) };
+            return;
+        }
+    }
+    image_multiply_scalar(img1, img2, out);
+}
+
+fn image_multiply_scalar(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
     for ((plane1, plane2), out_plane) in img1.iter().zip(img2.iter()).zip(out.iter_mut()) {
         for ((&p1, &p2), o) in plane1.iter().zip(plane2.iter()).zip(out_plane.iter_mut()) {
             *o = p1 * p2;
+        }
+    }
+}
+
+#[cfg(all(feature = "unsafe-simd", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn image_multiply_avx2(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
+    use std::arch::x86_64::*;
+
+    for c in 0..3 {
+        let plane1 = &img1[c];
+        let plane2 = &img2[c];
+        let out_plane = &mut out[c];
+        let len = plane1.len();
+
+        let chunks_8 = len / 8;
+        for chunk in 0..chunks_8 {
+            let base = chunk * 8;
+            let v1 = _mm256_loadu_ps(plane1.as_ptr().add(base));
+            let v2 = _mm256_loadu_ps(plane2.as_ptr().add(base));
+            let result = _mm256_mul_ps(v1, v2);
+            _mm256_storeu_ps(out_plane.as_mut_ptr().add(base), result);
+        }
+
+        // Remainder
+        for i in (chunks_8 * 8)..len {
+            out_plane[i] = plane1[i] * plane2[i];
         }
     }
 }

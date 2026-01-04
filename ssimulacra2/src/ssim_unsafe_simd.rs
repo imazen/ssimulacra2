@@ -7,6 +7,23 @@ use std::arch::x86_64::*;
 
 const C2: f32 = 0.0009f32;
 
+/// Fast horizontal sum of 8 f32s in an AVX register
+#[cfg(target_arch = "x86_64")]
+#[inline]
+#[target_feature(enable = "avx")]
+unsafe fn hsum_ps_avx(v: __m256) -> f32 {
+    // Add high 128 to low 128
+    let low = _mm256_castps256_ps128(v);
+    let high = _mm256_extractf128_ps(v, 1);
+    let sum128 = _mm_add_ps(low, high);
+    // Horizontal add within 128-bit
+    let shuf = _mm_movehdup_ps(sum128); // [1,1,3,3]
+    let sums = _mm_add_ps(sum128, shuf);
+    let shuf = _mm_movehl_ps(sums, sums);
+    let sums = _mm_add_ss(sums, shuf);
+    _mm_cvtss_f32(sums)
+}
+
 /// Computes SSIM map using unsafe SIMD
 pub fn ssim_map_unsafe(
     width: usize,
@@ -100,16 +117,9 @@ unsafe fn ssim_map_avx2(
             let d2 = _mm256_mul_ps(d, d);
             let d4 = _mm256_mul_ps(d2, d2);
 
-            // Extract and accumulate (horizontal sum)
-            let mut d_arr = [0.0f32; 8];
-            let mut d4_arr = [0.0f32; 8];
-            _mm256_storeu_ps(d_arr.as_mut_ptr(), d);
-            _mm256_storeu_ps(d4_arr.as_mut_ptr(), d4);
-
-            for i in 0..8 {
-                sum_d += d_arr[i] as f64;
-                sum_d4 += d4_arr[i] as f64;
-            }
+            // Efficient horizontal sum using hadd
+            sum_d += hsum_ps_avx(d) as f64;
+            sum_d4 += hsum_ps_avx(d4) as f64;
         }
 
         // Handle remainder with scalar
@@ -267,22 +277,11 @@ unsafe fn edge_diff_map_avx2(
             let detail_lost2 = _mm256_mul_ps(detail_lost, detail_lost);
             let detail_lost4 = _mm256_mul_ps(detail_lost2, detail_lost2);
 
-            // Extract and accumulate
-            let mut art_arr = [0.0f32; 8];
-            let mut art4_arr = [0.0f32; 8];
-            let mut det_arr = [0.0f32; 8];
-            let mut det4_arr = [0.0f32; 8];
-            _mm256_storeu_ps(art_arr.as_mut_ptr(), artifact);
-            _mm256_storeu_ps(art4_arr.as_mut_ptr(), artifact4);
-            _mm256_storeu_ps(det_arr.as_mut_ptr(), detail_lost);
-            _mm256_storeu_ps(det4_arr.as_mut_ptr(), detail_lost4);
-
-            for i in 0..8 {
-                sum_artifact += art_arr[i] as f64;
-                sum_artifact4 += art4_arr[i] as f64;
-                sum_detail_lost += det_arr[i] as f64;
-                sum_detail_lost4 += det4_arr[i] as f64;
-            }
+            // Efficient horizontal sum
+            sum_artifact += hsum_ps_avx(artifact) as f64;
+            sum_artifact4 += hsum_ps_avx(artifact4) as f64;
+            sum_detail_lost += hsum_ps_avx(detail_lost) as f64;
+            sum_detail_lost4 += hsum_ps_avx(detail_lost4) as f64;
         }
 
         // Handle remainder with scalar
