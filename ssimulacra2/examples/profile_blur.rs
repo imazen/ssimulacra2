@@ -1,7 +1,7 @@
 //! Profile blur passes separately
 //!
 //! Run with:
-//!   cargo run --release --example profile_blur --no-default-features --features blur-unsafe-simd
+//!   cargo run --release --example profile_blur
 
 use std::time::Instant;
 
