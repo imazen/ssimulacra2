@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use ssimulacra2::{compute_frame_ssimulacra2_with_config, Blur, BlurImpl, Ssimulacra2Config};
+use ssimulacra2::{compute_frame_ssimulacra2_with_config, Blur, SimdImpl, Ssimulacra2Config};
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
 fn create_test_image(width: usize, height: usize, seed: u64) -> Rgb {
@@ -33,13 +33,13 @@ fn create_test_image(width: usize, height: usize, seed: u64) -> Rgb {
     .unwrap()
 }
 
-fn benchmark_blur(width: usize, height: usize, impl_type: BlurImpl, iterations: usize) -> f64 {
+fn benchmark_blur(width: usize, height: usize, impl_type: SimdImpl, iterations: usize) -> f64 {
     // Create test plane
     let plane: Vec<f32> = (0..width * height)
         .map(|i| i as f32 / (width * height) as f32)
         .collect();
 
-    let mut blur = Blur::with_impl(width, height, impl_type);
+    let mut blur = Blur::with_simd_impl(width, height, impl_type);
     let img = [plane.clone(), plane.clone(), plane.clone()];
 
     // Warmup
@@ -104,11 +104,11 @@ fn main() {
     println!("{:-<60}", "");
 
     for (width, height, name, iters) in sizes.iter() {
-        let scalar_ms = benchmark_blur(*width, *height, BlurImpl::Scalar, *iters);
-        let simd_ms = benchmark_blur(*width, *height, BlurImpl::Simd, *iters);
+        let scalar_ms = benchmark_blur(*width, *height, SimdImpl::Scalar, *iters);
+        let simd_ms = benchmark_blur(*width, *height, SimdImpl::Simd, *iters);
 
         #[cfg(feature = "unsafe-simd")]
-        let unsafe_ms = benchmark_blur(*width, *height, BlurImpl::UnsafeSimd, *iters);
+        let unsafe_ms = benchmark_blur(*width, *height, SimdImpl::UnsafeSimd, *iters);
         #[cfg(not(feature = "unsafe-simd"))]
         let unsafe_ms = f64::NAN;
 

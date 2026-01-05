@@ -237,7 +237,10 @@ impl SimdGaussian {
         prev2: &mut [f32],
         out: &mut [f32],
     ) {
-        assert!(COLUMNS.is_multiple_of(4), "COLUMNS must be multiple of 4 for SIMD");
+        assert!(
+            COLUMNS.is_multiple_of(4),
+            "COLUMNS must be multiple of 4 for SIMD"
+        );
         assert_eq!(input.len(), output.len());
         assert_eq!(prev.len(), 3 * COLUMNS);
         assert_eq!(prev2.len(), 3 * COLUMNS);

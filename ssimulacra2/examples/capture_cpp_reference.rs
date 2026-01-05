@@ -18,7 +18,6 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
 /// Test image generator
 struct TestImageGenerator;

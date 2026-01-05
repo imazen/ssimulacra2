@@ -12,7 +12,7 @@ fn main() {
 
     // Create test data
     let input: Vec<f32> = (0..width * height)
-        .map(|i| (i as f32 / (width * height) as f32))
+        .map(|i| i as f32 / (width * height) as f32)
         .collect();
 
     let mut temp = vec![0.0f32; width * height];

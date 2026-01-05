@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --release --example profile_unsafe_simd
 
-use ssimulacra2::{compute_frame_ssimulacra2_with_config, Blur, BlurImpl, Ssimulacra2Config};
+use ssimulacra2::{compute_frame_ssimulacra2_with_config, Blur, SimdImpl, Ssimulacra2Config};
 use std::time::Instant;
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
@@ -147,7 +147,7 @@ fn blur_profile(width: usize, height: usize) {
     );
 
     // Scalar blur
-    let mut blur_scalar = Blur::with_impl(width, height, BlurImpl::Scalar);
+    let mut blur_scalar = Blur::with_simd_impl(width, height, SimdImpl::Scalar);
     let start = Instant::now();
     for _ in 0..iterations {
         let _ = blur_scalar.blur(&planar);
@@ -156,7 +156,7 @@ fn blur_profile(width: usize, height: usize) {
     println!("  Scalar:          {:.3}ms", scalar_ms);
 
     // SIMD blur
-    let mut blur_simd = Blur::with_impl(width, height, BlurImpl::Simd);
+    let mut blur_simd = Blur::with_simd_impl(width, height, SimdImpl::Simd);
     let start = Instant::now();
     for _ in 0..iterations {
         let _ = blur_simd.blur(&planar);
@@ -170,7 +170,7 @@ fn blur_profile(width: usize, height: usize) {
 
     #[cfg(feature = "unsafe-simd")]
     {
-        let mut blur_unsafe = Blur::with_impl(width, height, BlurImpl::UnsafeSimd);
+        let mut blur_unsafe = Blur::with_simd_impl(width, height, SimdImpl::UnsafeSimd);
         let start = Instant::now();
         for _ in 0..iterations {
             let _ = blur_unsafe.blur(&planar);
@@ -182,101 +182,5 @@ fn blur_profile(width: usize, height: usize) {
             scalar_ms / unsafe_ms,
             simd_ms / unsafe_ms
         );
-    }
-
-    // Test mixed configurations to identify component bottlenecks
-    println!("\n=== Mixed Configuration Analysis (1024x1024) ===\n");
-    mixed_config_analysis(width, height);
-}
-
-fn mixed_config_analysis(width: usize, height: usize) {
-    use ssimulacra2::{ComputeImpl, XybImpl};
-
-    let iterations = 20;
-    let (source, distorted) = create_test_images(width, height);
-
-    println!("Testing which component benefits most from unsafe SIMD:\n");
-
-    // Baseline: all SIMD
-    let config_all_simd = Ssimulacra2Config {
-        blur: BlurImpl::Simd,
-        xyb: XybImpl::Simd,
-        compute: ComputeImpl::Simd,
-    };
-    let all_simd_ms =
-        benchmark_config("All SIMD", config_all_simd, &source, &distorted, iterations);
-
-    #[cfg(feature = "unsafe-simd")]
-    {
-        // Only unsafe blur
-        let config_unsafe_blur = Ssimulacra2Config {
-            blur: BlurImpl::UnsafeSimd,
-            xyb: XybImpl::Simd,
-            compute: ComputeImpl::Simd,
-        };
-        let unsafe_blur_ms = benchmark_config(
-            "Unsafe blur only",
-            config_unsafe_blur,
-            &source,
-            &distorted,
-            iterations,
-        );
-
-        // Only unsafe XYB
-        let config_unsafe_xyb = Ssimulacra2Config {
-            blur: BlurImpl::Simd,
-            xyb: XybImpl::UnsafeSimd,
-            compute: ComputeImpl::Simd,
-        };
-        let unsafe_xyb_ms = benchmark_config(
-            "Unsafe XYB only",
-            config_unsafe_xyb,
-            &source,
-            &distorted,
-            iterations,
-        );
-
-        // Only unsafe compute
-        let config_unsafe_compute = Ssimulacra2Config {
-            blur: BlurImpl::Simd,
-            xyb: XybImpl::Simd,
-            compute: ComputeImpl::UnsafeSimd,
-        };
-        let unsafe_compute_ms = benchmark_config(
-            "Unsafe compute only",
-            config_unsafe_compute,
-            &source,
-            &distorted,
-            iterations,
-        );
-
-        // All unsafe
-        let config_all_unsafe = Ssimulacra2Config::unsafe_simd();
-        let all_unsafe_ms = benchmark_config(
-            "All Unsafe SIMD",
-            config_all_unsafe,
-            &source,
-            &distorted,
-            iterations,
-        );
-
-        println!();
-        println!("Component contribution to speedup (vs all SIMD):");
-        println!(
-            "  Blur:    {:.1}ms saved ({:.1}%)",
-            all_simd_ms - unsafe_blur_ms,
-            (all_simd_ms - unsafe_blur_ms) / (all_simd_ms - all_unsafe_ms) * 100.0
-        );
-        println!(
-            "  XYB:     {:.1}ms saved ({:.1}%)",
-            all_simd_ms - unsafe_xyb_ms,
-            (all_simd_ms - unsafe_xyb_ms) / (all_simd_ms - all_unsafe_ms) * 100.0
-        );
-        println!(
-            "  Compute: {:.1}ms saved ({:.1}%)",
-            all_simd_ms - unsafe_compute_ms,
-            (all_simd_ms - unsafe_compute_ms) / (all_simd_ms - all_unsafe_ms) * 100.0
-        );
-        println!("  Total:   {:.1}ms saved", all_simd_ms - all_unsafe_ms);
     }
 }

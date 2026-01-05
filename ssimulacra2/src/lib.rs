@@ -1,5 +1,7 @@
 mod blur;
 mod precompute;
+// Reference data for parity testing (hidden from docs but accessible for tests)
+#[doc(hidden)]
 pub mod reference_data;
 mod simd_ops;
 mod xyb_simd;
@@ -10,98 +12,69 @@ mod xyb_unsafe_simd;
 #[cfg(feature = "unsafe-simd")]
 mod ssim_unsafe_simd;
 
-pub use blur::{Blur, BlurImpl};
-pub use precompute::Ssim2Reference;
-pub use yuvxyb::{CastFromPrimitive, Frame, LinearRgb, Pixel, Plane, Rgb, Xyb, Yuv};
-pub use yuvxyb::{ColorPrimaries, MatrixCoefficients, TransferCharacteristic, YuvConfig};
+pub use blur::Blur;
+pub use precompute::Ssimulacra2Reference;
+pub use yuvxyb::{LinearRgb, Rgb};
+
+// Internal imports for XYB color space
+use yuvxyb::Xyb;
 
 // How often to downscale and score the input images.
 // Each scaling step will downscale by a factor of two.
 pub(crate) const NUM_SCALES: usize = 6;
 
-/// Implementation backend for XYB color conversion
+/// SIMD implementation backend for all operations (blur, XYB conversion, SSIM computation).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum XybImpl {
-    /// Scalar yuvxyb library (baseline)
+pub enum SimdImpl {
+    /// Scalar implementation (baseline, most portable)
     Scalar,
-    /// Safe SIMD via wide crate
+    /// Safe SIMD via wide crate (default, good balance of speed and safety)
     #[default]
     Simd,
-    /// Raw x86 intrinsics (fastest)
+    /// Raw x86 intrinsics (fastest, requires unsafe-simd feature)
     #[cfg(feature = "unsafe-simd")]
     UnsafeSimd,
 }
 
-impl XybImpl {
+impl SimdImpl {
+    /// Returns the name of this implementation
     pub fn name(&self) -> &'static str {
         match self {
-            XybImpl::Scalar => "scalar (yuvxyb)",
-            XybImpl::Simd => "simd (wide crate)",
+            SimdImpl::Scalar => "scalar",
+            SimdImpl::Simd => "simd (wide crate)",
             #[cfg(feature = "unsafe-simd")]
-            XybImpl::UnsafeSimd => "unsafe-simd (raw intrinsics)",
+            SimdImpl::UnsafeSimd => "unsafe-simd (raw intrinsics)",
         }
     }
 }
 
-/// Implementation backend for SSIM/edge diff computations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ComputeImpl {
-    /// Scalar implementation (baseline)
-    #[default]
-    Scalar,
-    /// Safe SIMD via wide crate
-    Simd,
-    /// Raw x86 intrinsics (fastest)
-    #[cfg(feature = "unsafe-simd")]
-    UnsafeSimd,
-}
-
-impl ComputeImpl {
-    pub fn name(&self) -> &'static str {
-        match self {
-            ComputeImpl::Scalar => "scalar",
-            ComputeImpl::Simd => "simd (wide crate)",
-            #[cfg(feature = "unsafe-simd")]
-            ComputeImpl::UnsafeSimd => "unsafe-simd (raw intrinsics)",
-        }
-    }
-}
-
-/// Configuration for SSIMULACRA2 computation implementations
+/// Configuration for SSIMULACRA2 computation.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Ssimulacra2Config {
-    pub blur: BlurImpl,
-    pub xyb: XybImpl,
-    pub compute: ComputeImpl,
+    /// Implementation backend for all operations
+    pub impl_type: SimdImpl,
 }
 
 impl Ssimulacra2Config {
+    /// Create configuration with specified implementation
+    pub fn new(impl_type: SimdImpl) -> Self {
+        Self { impl_type }
+    }
+
     /// Default configuration using safe SIMD for all operations
     pub fn simd() -> Self {
-        Self {
-            blur: BlurImpl::Simd,
-            xyb: XybImpl::Simd,
-            compute: ComputeImpl::Simd,
-        }
+        Self::new(SimdImpl::Simd)
     }
 
     /// Configuration using unsafe SIMD for all operations (fastest)
     #[cfg(feature = "unsafe-simd")]
     pub fn unsafe_simd() -> Self {
-        Self {
-            blur: BlurImpl::UnsafeSimd,
-            xyb: XybImpl::UnsafeSimd,
-            compute: ComputeImpl::UnsafeSimd,
-        }
+        Self::new(SimdImpl::UnsafeSimd)
     }
 
     /// Scalar configuration (baseline, most compatible)
     pub fn scalar() -> Self {
-        Self {
-            blur: BlurImpl::Scalar,
-            xyb: XybImpl::Scalar,
-            compute: ComputeImpl::Scalar,
-        }
+        Self::new(SimdImpl::Scalar)
     }
 }
 
@@ -171,6 +144,7 @@ where
 
     let mut width = img1.width();
     let mut height = img1.height();
+    let impl_type = config.impl_type;
 
     // Pre-allocate reusable buffers (sized for initial dimensions, shrunk per scale)
     let alloc_plane = || vec![0.0f32; width * height];
@@ -185,7 +159,7 @@ where
     let mut img1_planar = alloc_3planes();
     let mut img2_planar = alloc_3planes();
 
-    let mut blur = Blur::with_impl(width, height, config.blur);
+    let mut blur = Blur::with_simd_impl(width, height, impl_type);
     let mut msssim = Msssim::default();
 
     for scale in 0..NUM_SCALES {
@@ -218,8 +192,8 @@ where
         }
         blur.shrink_to(width, height);
 
-        let mut img1_xyb = linear_rgb_to_xyb(img1.clone(), config.xyb);
-        let mut img2_xyb = linear_rgb_to_xyb(img2.clone(), config.xyb);
+        let mut img1_xyb = linear_rgb_to_xyb(img1.clone(), impl_type);
+        let mut img2_xyb = linear_rgb_to_xyb(img2.clone(), impl_type);
 
         make_positive_xyb(&mut img1_xyb);
         make_positive_xyb(&mut img2_xyb);
@@ -227,27 +201,20 @@ where
         xyb_to_planar_into(&img1_xyb, &mut img1_planar);
         xyb_to_planar_into(&img2_xyb, &mut img2_planar);
 
-        image_multiply(&img1_planar, &img1_planar, &mut mul, config.compute);
+        image_multiply(&img1_planar, &img1_planar, &mut mul, impl_type);
         blur.blur_into(&mul, &mut sigma1_sq);
 
-        image_multiply(&img2_planar, &img2_planar, &mut mul, config.compute);
+        image_multiply(&img2_planar, &img2_planar, &mut mul, impl_type);
         blur.blur_into(&mul, &mut sigma2_sq);
 
-        image_multiply(&img1_planar, &img2_planar, &mut mul, config.compute);
+        image_multiply(&img1_planar, &img2_planar, &mut mul, impl_type);
         blur.blur_into(&mul, &mut sigma12);
 
         blur.blur_into(&img1_planar, &mut mu1);
         blur.blur_into(&img2_planar, &mut mu2);
 
         let avg_ssim = ssim_map(
-            width,
-            height,
-            &mu1,
-            &mu2,
-            &sigma1_sq,
-            &sigma2_sq,
-            &sigma12,
-            config.compute,
+            width, height, &mu1, &mu2, &sigma1_sq, &sigma2_sq, &sigma12, impl_type,
         );
         let avg_edgediff = edge_diff_map(
             width,
@@ -256,7 +223,7 @@ where
             &mu1,
             &img2_planar,
             &mu2,
-            config.compute,
+            impl_type,
         );
         msssim.scales.push(MsssimScale {
             avg_ssim,
@@ -268,10 +235,10 @@ where
 }
 
 /// Convert LinearRgb to Xyb using the specified implementation
-fn linear_rgb_to_xyb(linear_rgb: LinearRgb, impl_type: XybImpl) -> Xyb {
+fn linear_rgb_to_xyb(linear_rgb: LinearRgb, impl_type: SimdImpl) -> Xyb {
     match impl_type {
-        XybImpl::Scalar => Xyb::from(linear_rgb),
-        XybImpl::Simd => {
+        SimdImpl::Scalar => Xyb::from(linear_rgb),
+        SimdImpl::Simd => {
             let width = linear_rgb.width();
             let height = linear_rgb.height();
             let mut data = linear_rgb.into_data();
@@ -279,7 +246,7 @@ fn linear_rgb_to_xyb(linear_rgb: LinearRgb, impl_type: XybImpl) -> Xyb {
             Xyb::new(data, width, height).expect("XYB construction should not fail")
         }
         #[cfg(feature = "unsafe-simd")]
-        XybImpl::UnsafeSimd => {
+        SimdImpl::UnsafeSimd => {
             let width = linear_rgb.width();
             let height = linear_rgb.height();
             let mut data = linear_rgb.into_data();
@@ -291,7 +258,7 @@ fn linear_rgb_to_xyb(linear_rgb: LinearRgb, impl_type: XybImpl) -> Xyb {
 
 // For backwards compatibility
 pub(crate) fn linear_rgb_to_xyb_simd(linear_rgb: LinearRgb) -> Xyb {
-    linear_rgb_to_xyb(linear_rgb, XybImpl::Simd)
+    linear_rgb_to_xyb(linear_rgb, SimdImpl::Simd)
 }
 
 pub(crate) fn make_positive_xyb(xyb: &mut Xyb) {
@@ -335,13 +302,13 @@ pub(crate) fn image_multiply(
     img1: &[Vec<f32>; 3],
     img2: &[Vec<f32>; 3],
     out: &mut [Vec<f32>; 3],
-    impl_type: ComputeImpl,
+    impl_type: SimdImpl,
 ) {
     match impl_type {
-        ComputeImpl::Scalar => image_multiply_scalar(img1, img2, out),
-        ComputeImpl::Simd => simd_ops::image_multiply_simd(img1, img2, out),
+        SimdImpl::Scalar => image_multiply_scalar(img1, img2, out),
+        SimdImpl::Simd => simd_ops::image_multiply_simd(img1, img2, out),
         #[cfg(feature = "unsafe-simd")]
-        ComputeImpl::UnsafeSimd => {
+        SimdImpl::UnsafeSimd => {
             #[cfg(target_arch = "x86_64")]
             {
                 if is_x86_feature_detected!("avx2") {
@@ -429,13 +396,13 @@ pub(crate) fn ssim_map(
     s11: &[Vec<f32>; 3],
     s22: &[Vec<f32>; 3],
     s12: &[Vec<f32>; 3],
-    impl_type: ComputeImpl,
+    impl_type: SimdImpl,
 ) -> [f64; 3 * 2] {
     match impl_type {
-        ComputeImpl::Scalar => ssim_map_scalar(width, height, m1, m2, s11, s22, s12),
-        ComputeImpl::Simd => simd_ops::ssim_map_simd(width, height, m1, m2, s11, s22, s12),
+        SimdImpl::Scalar => ssim_map_scalar(width, height, m1, m2, s11, s22, s12),
+        SimdImpl::Simd => simd_ops::ssim_map_simd(width, height, m1, m2, s11, s22, s12),
         #[cfg(feature = "unsafe-simd")]
-        ComputeImpl::UnsafeSimd => {
+        SimdImpl::UnsafeSimd => {
             ssim_unsafe_simd::ssim_map_unsafe(width, height, m1, m2, s11, s22, s12)
         }
     }
@@ -496,13 +463,13 @@ pub(crate) fn edge_diff_map(
     mu1: &[Vec<f32>; 3],
     img2: &[Vec<f32>; 3],
     mu2: &[Vec<f32>; 3],
-    impl_type: ComputeImpl,
+    impl_type: SimdImpl,
 ) -> [f64; 3 * 4] {
     match impl_type {
-        ComputeImpl::Scalar => edge_diff_map_scalar(width, height, img1, mu1, img2, mu2),
-        ComputeImpl::Simd => simd_ops::edge_diff_map_simd(width, height, img1, mu1, img2, mu2),
+        SimdImpl::Scalar => edge_diff_map_scalar(width, height, img1, mu1, img2, mu2),
+        SimdImpl::Simd => simd_ops::edge_diff_map_simd(width, height, img1, mu1, img2, mu2),
         #[cfg(feature = "unsafe-simd")]
-        ComputeImpl::UnsafeSimd => {
+        SimdImpl::UnsafeSimd => {
             ssim_unsafe_simd::edge_diff_map_unsafe(width, height, img1, mu1, img2, mu2)
         }
     }
@@ -713,7 +680,7 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use yuvxyb::Rgb;
+    use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
     #[test]
     fn test_ssimulacra2() {

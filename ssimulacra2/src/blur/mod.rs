@@ -4,36 +4,12 @@ mod simd_gaussian;
 #[cfg(feature = "unsafe-simd")]
 mod unsafe_simd_gaussian;
 
+use crate::SimdImpl;
 use gaussian::RecursiveGaussian;
 use simd_gaussian::SimdGaussian;
 
 #[cfg(feature = "unsafe-simd")]
 use unsafe_simd_gaussian::UnsafeSimdGaussian;
-
-/// Implementation backend for blur operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum BlurImpl {
-    /// Scalar implementation (baseline, most accurate)
-    Scalar,
-    /// Safe SIMD via wide crate
-    #[default]
-    Simd,
-    /// Raw x86 intrinsics (fastest, experimental)
-    #[cfg(feature = "unsafe-simd")]
-    UnsafeSimd,
-}
-
-impl BlurImpl {
-    /// Returns the name of this implementation
-    pub fn name(&self) -> &'static str {
-        match self {
-            BlurImpl::Scalar => "scalar",
-            BlurImpl::Simd => "simd (wide crate)",
-            #[cfg(feature = "unsafe-simd")]
-            BlurImpl::UnsafeSimd => "unsafe-simd (raw intrinsics)",
-        }
-    }
-}
 
 /// Structure handling image blur with selectable implementation.
 ///
@@ -44,7 +20,7 @@ impl BlurImpl {
 pub struct Blur {
     width: usize,
     height: usize,
-    impl_type: BlurImpl,
+    impl_type: SimdImpl,
     // Scalar backend
     scalar_kernel: RecursiveGaussian,
     scalar_temp: Vec<f32>,
@@ -59,12 +35,12 @@ impl Blur {
     /// Create a new [Blur] with the default implementation (SIMD).
     #[must_use]
     pub fn new(width: usize, height: usize) -> Self {
-        Self::with_impl(width, height, BlurImpl::default())
+        Self::with_simd_impl(width, height, SimdImpl::default())
     }
 
     /// Create a new [Blur] with a specific implementation.
     #[must_use]
-    pub fn with_impl(width: usize, height: usize, impl_type: BlurImpl) -> Self {
+    pub fn with_simd_impl(width: usize, height: usize, impl_type: SimdImpl) -> Self {
         Blur {
             width,
             height,
@@ -78,12 +54,12 @@ impl Blur {
     }
 
     /// Get the current implementation type.
-    pub fn impl_type(&self) -> BlurImpl {
+    pub fn impl_type(&self) -> SimdImpl {
         self.impl_type
     }
 
     /// Set the implementation type.
-    pub fn set_impl(&mut self, impl_type: BlurImpl) {
+    pub fn set_impl(&mut self, impl_type: SimdImpl) {
         self.impl_type = impl_type;
     }
 
@@ -121,10 +97,10 @@ impl Blur {
 
     fn blur_plane_into(&mut self, plane: &[f32], out: &mut [f32]) {
         match self.impl_type {
-            BlurImpl::Scalar => self.blur_plane_scalar_into(plane, out),
-            BlurImpl::Simd => self.blur_plane_simd_into(plane, out),
+            SimdImpl::Scalar => self.blur_plane_scalar_into(plane, out),
+            SimdImpl::Simd => self.blur_plane_simd_into(plane, out),
             #[cfg(feature = "unsafe-simd")]
-            BlurImpl::UnsafeSimd => self.blur_plane_unsafe_simd_into(plane, out),
+            SimdImpl::UnsafeSimd => self.blur_plane_unsafe_simd_into(plane, out),
         }
     }
 

@@ -162,8 +162,9 @@ fn test_jpeg_quality_with_configs() {
     ];
 
     for (name, config) in configs {
-        let score = compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), config)
-            .expect("SSIMULACRA2 computation failed");
+        let score =
+            compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), config)
+                .expect("SSIMULACRA2 computation failed");
 
         let error = (score - cpp_score).abs();
         println!("{}: score={:.6}, error from C++={:.6}", name, score, error);

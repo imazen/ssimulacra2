@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```
-//! use ssimulacra2::Ssim2Reference;
+//! use ssimulacra2::Ssimulacra2Reference;
 //! use yuvxyb::{Rgb, TransferCharacteristic, ColorPrimaries};
 //!
 //! // Load reference image
@@ -20,7 +20,7 @@
 //! ).unwrap();
 //!
 //! // Precompute reference data once
-//! let precomputed = Ssim2Reference::new(reference).unwrap();
+//! let precomputed = Ssimulacra2Reference::new(reference).unwrap();
 //!
 //! // Compare against a distorted image
 //! let distorted_rgb = vec![[0.9f32, 0.95, 1.05]; 512 * 512];
@@ -38,7 +38,7 @@
 use crate::blur::Blur;
 use crate::{
     downscale_by_2, edge_diff_map, image_multiply, linear_rgb_to_xyb_simd, make_positive_xyb,
-    ssim_map, xyb_to_planar, ComputeImpl, LinearRgb, Msssim, MsssimScale, Ssimulacra2Error,
+    ssim_map, xyb_to_planar, LinearRgb, Msssim, MsssimScale, SimdImpl, Ssimulacra2Error,
     NUM_SCALES,
 };
 
@@ -62,13 +62,13 @@ struct ScaleData {
 /// For simulated annealing or other optimization where you compare many variations
 /// against the same source, this provides approximately 2x speedup.
 #[derive(Clone, Debug)]
-pub struct Ssim2Reference {
+pub struct Ssimulacra2Reference {
     scales: Vec<ScaleData>,
     original_width: usize,
     original_height: usize,
 }
 
-impl Ssim2Reference {
+impl Ssimulacra2Reference {
     /// Precompute reference data for the given source image.
     ///
     /// # Errors
@@ -124,7 +124,7 @@ impl Ssim2Reference {
             let mu1 = blur.blur(&img1_planar);
 
             // Precompute sigma1_sq = blur(img1 * img1)
-            image_multiply(&img1_planar, &img1_planar, &mut mul, ComputeImpl::default());
+            image_multiply(&img1_planar, &img1_planar, &mut mul, SimdImpl::default());
             let sigma1_sq = blur.blur(&mul);
 
             scales.push(ScaleData {
@@ -197,7 +197,7 @@ impl Ssim2Reference {
             let mu2 = blur.blur(&img2_planar);
 
             // Compute sigma2_sq = blur(img2 * img2)
-            image_multiply(&img2_planar, &img2_planar, &mut mul, ComputeImpl::default());
+            image_multiply(&img2_planar, &img2_planar, &mut mul, SimdImpl::default());
             let sigma2_sq = blur.blur(&mul);
 
             // Compute sigma12 = blur(img1 * img2) - cross-term
@@ -205,7 +205,7 @@ impl Ssim2Reference {
                 &scale_data.img1_planar,
                 &img2_planar,
                 &mut mul,
-                ComputeImpl::default(),
+                SimdImpl::default(),
             );
             let sigma12 = blur.blur(&mul);
 
@@ -218,7 +218,7 @@ impl Ssim2Reference {
                 &scale_data.sigma1_sq,
                 &sigma2_sq,
                 &sigma12,
-                ComputeImpl::default(),
+                SimdImpl::default(),
             );
 
             let avg_edgediff = edge_diff_map(
@@ -228,7 +228,7 @@ impl Ssim2Reference {
                 &scale_data.mu1,
                 &img2_planar,
                 &mu2,
-                ComputeImpl::default(),
+                SimdImpl::default(),
             );
 
             msssim.scales.push(MsssimScale {
@@ -313,7 +313,7 @@ mod tests {
         let full_score = compute_frame_ssimulacra2(source_clone, distorted.clone()).unwrap();
 
         // Compute using precomputed reference
-        let precomputed = Ssim2Reference::new(source).unwrap();
+        let precomputed = Ssimulacra2Reference::new(source).unwrap();
         let precomputed_score = precomputed.compare(distorted).unwrap();
 
         // Scores should match exactly (both use same SIMD XYB path)
@@ -348,7 +348,7 @@ mod tests {
         )
         .unwrap();
 
-        let precomputed = Ssim2Reference::new(source).unwrap();
+        let precomputed = Ssimulacra2Reference::new(source).unwrap();
         let result = precomputed.compare(distorted);
 
         assert!(matches!(
@@ -369,7 +369,7 @@ mod tests {
         )
         .unwrap();
 
-        let precomputed = Ssim2Reference::new(source).unwrap();
+        let precomputed = Ssimulacra2Reference::new(source).unwrap();
 
         assert_eq!(precomputed.width(), 128);
         assert_eq!(precomputed.height(), 96);

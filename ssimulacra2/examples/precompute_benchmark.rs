@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --release --example precompute_benchmark
 
-use ssimulacra2::{compute_frame_ssimulacra2, Ssim2Reference};
+use ssimulacra2::{compute_frame_ssimulacra2, Ssimulacra2Reference};
 use std::time::Instant;
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
@@ -66,7 +66,7 @@ fn main() {
         .unwrap();
 
         // Precompute reference once (not counted in benchmark)
-        let precomputed = Ssim2Reference::new(reference).unwrap();
+        let precomputed = Ssimulacra2Reference::new(reference).unwrap();
 
         // Benchmark only the comparison step
         let start = Instant::now();

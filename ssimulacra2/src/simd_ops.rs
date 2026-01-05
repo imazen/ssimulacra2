@@ -9,7 +9,7 @@ use wide::f32x16;
 /// Processes 16 pixels at once using f32x16, then accumulates in f64 for precision
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub fn ssim_map_simd(
+pub(crate) fn ssim_map_simd(
     width: usize,
     height: usize,
     m1: &[Vec<f32>; 3],
@@ -194,7 +194,7 @@ pub fn ssim_map_simd(
 /// SIMD-optimized edge difference map computation
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub fn edge_diff_map_simd(
+pub(crate) fn edge_diff_map_simd(
     width: usize,
     height: usize,
     img1: &[Vec<f32>; 3],
@@ -350,7 +350,11 @@ pub fn edge_diff_map_simd(
 /// SIMD-optimized image multiplication
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub fn image_multiply_simd(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
+pub(crate) fn image_multiply_simd(
+    img1: &[Vec<f32>; 3],
+    img2: &[Vec<f32>; 3],
+    out: &mut [Vec<f32>; 3],
+) {
     for c in 0..3 {
         let plane1 = &img1[c];
         let plane2 = &img2[c];
