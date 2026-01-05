@@ -179,9 +179,12 @@ fn test_simd_scores_pinned_real_images() {
 
     for case in REAL_IMAGE_CASES {
         let distorted = load_image(case.distorted_file);
-        let score =
-            compute_frame_ssimulacra2_with_config(source.clone(), distorted, Ssimulacra2Config::simd())
-                .unwrap();
+        let score = compute_frame_ssimulacra2_with_config(
+            source.clone(),
+            distorted,
+            Ssimulacra2Config::simd(),
+        )
+        .unwrap();
 
         // Exact match - any deviation indicates a regression
         assert!(
@@ -362,9 +365,12 @@ fn test_jpeg_quality_ordering_preserved() {
 
     for file in files {
         let distorted = load_image(file);
-        let score =
-            compute_frame_ssimulacra2_with_config(source.clone(), distorted, Ssimulacra2Config::simd())
-                .unwrap();
+        let score = compute_frame_ssimulacra2_with_config(
+            source.clone(),
+            distorted,
+            Ssimulacra2Config::simd(),
+        )
+        .unwrap();
 
         assert!(
             score > prev_score,

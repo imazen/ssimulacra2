@@ -1,15 +1,14 @@
-//! Unsafe SIMD-optimized Recursive Gaussian using raw x86 intrinsics
+//! SIMD-optimized Recursive Gaussian using x86 intrinsics
 //!
-//! This module uses unsafe raw pointer arithmetic and explicit SIMD intrinsics
-//! for maximum performance. It trades safety guarantees for speed.
-//!
-//! Key optimizations:
-//! - Raw pointer arithmetic (no bounds checks)
-//! - Direct AVX2/AVX-512 intrinsics
+//! This module provides fast Gaussian blur with:
+//! - SIMD arithmetic (safe in Rust 1.87+ when target features enabled)
 //! - Prefetching for memory access patterns
-//! - Aligned memory operations where possible
-//! - Manual loop unrolling
 //! - Multiversion for compile-time CPU feature optimization
+//!
+//! ## Remaining unsafe code
+//! The following operations remain unsafe for performance:
+//! - Raw pointer arithmetic for 2D buffer access (avoids bounds checks)
+//! - `_mm_prefetch` hints (safe in practice but marked unsafe)
 
 mod consts {
     #![allow(clippy::unreadable_literal)]

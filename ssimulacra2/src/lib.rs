@@ -1,4 +1,5 @@
 mod blur;
+mod input;
 mod precompute;
 // Reference data for parity testing (hidden from docs but accessible for tests)
 #[doc(hidden)]
@@ -13,11 +14,18 @@ mod xyb_unsafe_simd;
 mod ssim_unsafe_simd;
 
 pub use blur::Blur;
+pub use input::{LinearRgbImage, ToLinearRgb};
 pub use precompute::Ssimulacra2Reference;
 pub use yuvxyb::{LinearRgb, Rgb};
 
+// Re-export sRGB conversion functions for users implementing custom input types
+pub use input::{srgb_to_linear, srgb_u16_to_linear, srgb_u8_to_linear};
+
 // Internal imports for XYB color space
 use yuvxyb::Xyb;
+
+#[cfg(all(feature = "unsafe-simd", target_arch = "x86_64"))]
+use safe_unaligned_simd::x86_64 as safe_simd;
 
 // How often to downscale and score the input images.
 // Each scaling step will downscale by a factor of two.
@@ -116,6 +124,50 @@ where
     LinearRgb: TryFrom<T> + TryFrom<U>,
 {
     compute_frame_ssimulacra2_impl(source, distorted, config)
+}
+
+/// Computes the SSIMULACRA2 score from any input type implementing [`ToLinearRgb`].
+///
+/// This is the recommended API for new code. It supports:
+/// - `imgref` types (with the `imgref` feature): `ImgRef<[u8; 3]>`, `ImgRef<[f32; 3]>`, etc.
+/// - `yuvxyb` types: `Rgb`, `LinearRgb`
+/// - Custom types implementing [`ToLinearRgb`]
+///
+/// # Color space conventions
+/// - Integer types (`u8`, `u16`) are assumed to be sRGB (gamma-encoded)
+/// - Float types (`f32`) are assumed to be linear RGB
+/// - Grayscale types are expanded to RGB (R=G=B)
+///
+/// # Example
+/// ```ignore
+/// use imgref::ImgVec;
+/// use ssimulacra2::compute_ssimulacra2;
+///
+/// let source: ImgVec<[u8; 3]> = /* ... */;
+/// let distorted: ImgVec<[u8; 3]> = /* ... */;
+/// let score = compute_ssimulacra2(&source, &distorted)?;
+/// ```
+pub fn compute_ssimulacra2<S, D>(source: S, distorted: D) -> Result<f64, Ssimulacra2Error>
+where
+    S: ToLinearRgb,
+    D: ToLinearRgb,
+{
+    compute_ssimulacra2_with_config(source, distorted, Ssimulacra2Config::default())
+}
+
+/// Computes the SSIMULACRA2 score with custom configuration from [`ToLinearRgb`] inputs.
+pub fn compute_ssimulacra2_with_config<S, D>(
+    source: S,
+    distorted: D,
+    config: Ssimulacra2Config,
+) -> Result<f64, Ssimulacra2Error>
+where
+    S: ToLinearRgb,
+    D: ToLinearRgb,
+{
+    let img1: LinearRgb = source.to_linear_rgb().into();
+    let img2: LinearRgb = distorted.to_linear_rgb().into();
+    compute_frame_ssimulacra2_impl(img1, img2, config)
 }
 
 fn compute_frame_ssimulacra2_impl<T, U>(
@@ -344,10 +396,12 @@ unsafe fn image_multiply_avx2(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &
         let chunks_8 = len / 8;
         for chunk in 0..chunks_8 {
             let base = chunk * 8;
-            let v1 = _mm256_loadu_ps(plane1.as_ptr().add(base));
-            let v2 = _mm256_loadu_ps(plane2.as_ptr().add(base));
+            // Safe loads via safe_unaligned_simd
+            let v1 = safe_simd::_mm256_loadu_ps(plane1[base..].first_chunk::<8>().unwrap());
+            let v2 = safe_simd::_mm256_loadu_ps(plane2[base..].first_chunk::<8>().unwrap());
             let result = _mm256_mul_ps(v1, v2);
-            _mm256_storeu_ps(out_plane.as_mut_ptr().add(base), result);
+            // Safe store
+            safe_simd::_mm256_storeu_ps(out_plane[base..].first_chunk_mut::<8>().unwrap(), result);
         }
 
         // Remainder

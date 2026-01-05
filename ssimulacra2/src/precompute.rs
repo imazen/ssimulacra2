@@ -36,6 +36,7 @@
 //! ```
 
 use crate::blur::Blur;
+use crate::input::ToLinearRgb;
 use crate::{
     downscale_by_2, edge_diff_map, image_multiply, linear_rgb_to_xyb_simd, make_positive_xyb,
     ssim_map, xyb_to_planar, LinearRgb, Msssim, MsssimScale, SimdImpl, Ssimulacra2Error,
@@ -71,17 +72,15 @@ pub struct Ssimulacra2Reference {
 impl Ssimulacra2Reference {
     /// Precompute reference data for the given source image.
     ///
+    /// Supports:
+    /// - `imgref` types (with the `imgref` feature): `ImgRef<[u8; 3]>`, `ImgRef<[f32; 3]>`, etc.
+    /// - `yuvxyb` types: `Rgb`, `LinearRgb`
+    /// - Custom types implementing [`ToLinearRgb`]
+    ///
     /// # Errors
-    /// - If the source image cannot be converted to LinearRgb
     /// - If the image is smaller than 8x8 pixels
-    pub fn new<T>(source: T) -> Result<Self, Ssimulacra2Error>
-    where
-        LinearRgb: TryFrom<T>,
-    {
-        let Ok(mut img1) = LinearRgb::try_from(source) else {
-            return Err(Ssimulacra2Error::LinearRgbConversionFailed);
-        };
-
+    pub fn new<T: ToLinearRgb>(source: T) -> Result<Self, Ssimulacra2Error> {
+        let mut img1: LinearRgb = source.to_linear_rgb().into();
         if img1.width() < 8 || img1.height() < 8 {
             return Err(Ssimulacra2Error::InvalidImageSize);
         }
@@ -143,20 +142,13 @@ impl Ssimulacra2Reference {
 
     /// Compare a distorted image against the precomputed reference.
     ///
-    /// This is approximately 2x faster than calling `compute_frame_ssimulacra2`
+    /// This is approximately 2x faster than calling `compute_ssimulacra2`
     /// because it only needs to process the distorted image and compute cross-terms.
     ///
     /// # Errors
-    /// - If the distorted image cannot be converted to LinearRgb
     /// - If the distorted image dimensions don't match the reference
-    pub fn compare<T>(&self, distorted: T) -> Result<f64, Ssimulacra2Error>
-    where
-        LinearRgb: TryFrom<T>,
-    {
-        let Ok(mut img2) = LinearRgb::try_from(distorted) else {
-            return Err(Ssimulacra2Error::LinearRgbConversionFailed);
-        };
-
+    pub fn compare<T: ToLinearRgb>(&self, distorted: T) -> Result<f64, Ssimulacra2Error> {
+        let mut img2: LinearRgb = distorted.to_linear_rgb().into();
         if img2.width() != self.original_width || img2.height() != self.original_height {
             return Err(Ssimulacra2Error::NonMatchingImageDimensions);
         }

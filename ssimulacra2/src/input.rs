@@ -1,0 +1,399 @@
+//! Input image types and conversion to linear RGB.
+//!
+//! This module provides the [`ToLinearRgb`] trait for converting various image
+//! formats to the internal linear RGB representation used by SSIMULACRA2.
+//!
+//! ## Supported input formats (with `imgref` feature)
+//!
+//! | Type | Color Space | Conversion |
+//! |------|-------------|------------|
+//! | `ImgRef<[u8; 3]>` | sRGB (gamma) | `/255` + linearize |
+//! | `ImgRef<[u16; 3]>` | sRGB (gamma) | `/65535` + linearize |
+//! | `ImgRef<[f32; 3]>` | Linear RGB | none |
+//! | `ImgRef<u8>` | sRGB grayscale | `/255` + linearize + expand |
+//! | `ImgRef<f32>` | Linear grayscale | expand to RGB |
+//!
+//! ## Convention
+//!
+//! - Integer types (u8, u16) are assumed to be **sRGB** (gamma-encoded)
+//! - Float types (f32) are assumed to be **linear**
+
+/// Internal linear RGB image representation.
+///
+/// Stores pixels as `[f32; 3]` in linear RGB color space (0.0-1.0 range).
+#[derive(Clone)]
+pub struct LinearRgbImage {
+    pub(crate) data: Vec<[f32; 3]>,
+    pub(crate) width: usize,
+    pub(crate) height: usize,
+}
+
+impl LinearRgbImage {
+    /// Creates a new linear RGB image from raw data.
+    pub fn new(data: Vec<[f32; 3]>, width: usize, height: usize) -> Self {
+        debug_assert_eq!(data.len(), width * height);
+        Self {
+            data,
+            width,
+            height,
+        }
+    }
+
+    /// Returns the image width.
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    /// Returns the image height.
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    /// Returns the pixel data.
+    pub fn data(&self) -> &[[f32; 3]] {
+        &self.data
+    }
+
+    /// Returns mutable pixel data.
+    pub fn data_mut(&mut self) -> &mut [[f32; 3]] {
+        &mut self.data
+    }
+}
+
+/// Trait for converting image types to linear RGB.
+///
+/// Implement this trait to add support for custom image types.
+pub trait ToLinearRgb {
+    /// Convert to linear RGB image.
+    fn to_linear_rgb(&self) -> LinearRgbImage;
+}
+
+// =============================================================================
+// sRGB conversion functions
+// =============================================================================
+
+/// Convert sRGB (gamma-encoded) value to linear.
+///
+/// Uses the standard sRGB transfer function.
+#[inline]
+pub fn srgb_to_linear(s: f32) -> f32 {
+    if s <= 0.04045 {
+        s / 12.92
+    } else {
+        ((s + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// Convert 8-bit sRGB value to linear f32.
+#[inline]
+pub fn srgb_u8_to_linear(v: u8) -> f32 {
+    // Use lookup table for performance
+    SRGB_TO_LINEAR_LUT[v as usize]
+}
+
+/// Convert 16-bit sRGB value to linear f32.
+#[inline]
+pub fn srgb_u16_to_linear(v: u16) -> f32 {
+    srgb_to_linear(v as f32 / 65535.0)
+}
+
+// Precomputed lookup table for sRGB u8 -> linear f32
+// Generated with: (0..256).map(|i| srgb_to_linear(i as f32 / 255.0))
+static SRGB_TO_LINEAR_LUT: std::sync::LazyLock<[f32; 256]> = std::sync::LazyLock::new(|| {
+    let mut lut = [0.0f32; 256];
+    for (i, entry) in lut.iter_mut().enumerate() {
+        *entry = srgb_to_linear(i as f32 / 255.0);
+    }
+    lut
+});
+
+// =============================================================================
+// imgref implementations
+// =============================================================================
+
+#[cfg(feature = "imgref")]
+mod imgref_impl {
+    use super::*;
+    use imgref::ImgRef;
+
+    /// RGB u8 (sRGB) -> Linear RGB
+    impl ToLinearRgb for ImgRef<'_, [u8; 3]> {
+        fn to_linear_rgb(&self) -> LinearRgbImage {
+            let data: Vec<[f32; 3]> = self
+                .pixels()
+                .map(|[r, g, b]| {
+                    [
+                        srgb_u8_to_linear(r),
+                        srgb_u8_to_linear(g),
+                        srgb_u8_to_linear(b),
+                    ]
+                })
+                .collect();
+            LinearRgbImage::new(data, self.width(), self.height())
+        }
+    }
+
+    /// RGB u16 (sRGB) -> Linear RGB
+    impl ToLinearRgb for ImgRef<'_, [u16; 3]> {
+        fn to_linear_rgb(&self) -> LinearRgbImage {
+            let data: Vec<[f32; 3]> = self
+                .pixels()
+                .map(|[r, g, b]| {
+                    [
+                        srgb_u16_to_linear(r),
+                        srgb_u16_to_linear(g),
+                        srgb_u16_to_linear(b),
+                    ]
+                })
+                .collect();
+            LinearRgbImage::new(data, self.width(), self.height())
+        }
+    }
+
+    /// RGB f32 (already linear) -> Linear RGB
+    impl ToLinearRgb for ImgRef<'_, [f32; 3]> {
+        fn to_linear_rgb(&self) -> LinearRgbImage {
+            let data: Vec<[f32; 3]> = self.pixels().collect();
+            LinearRgbImage::new(data, self.width(), self.height())
+        }
+    }
+
+    /// Grayscale u8 (sRGB) -> Linear RGB
+    impl ToLinearRgb for ImgRef<'_, u8> {
+        fn to_linear_rgb(&self) -> LinearRgbImage {
+            let data: Vec<[f32; 3]> = self
+                .pixels()
+                .map(|v| {
+                    let l = srgb_u8_to_linear(v);
+                    [l, l, l]
+                })
+                .collect();
+            LinearRgbImage::new(data, self.width(), self.height())
+        }
+    }
+
+    /// Grayscale f32 (linear) -> Linear RGB
+    impl ToLinearRgb for ImgRef<'_, f32> {
+        fn to_linear_rgb(&self) -> LinearRgbImage {
+            let data: Vec<[f32; 3]> = self.pixels().map(|v| [v, v, v]).collect();
+            LinearRgbImage::new(data, self.width(), self.height())
+        }
+    }
+}
+
+// =============================================================================
+// yuvxyb compatibility
+// =============================================================================
+
+impl ToLinearRgb for yuvxyb::LinearRgb {
+    fn to_linear_rgb(&self) -> LinearRgbImage {
+        LinearRgbImage::new(self.data().to_vec(), self.width(), self.height())
+    }
+}
+
+// =============================================================================
+// Conversion to yuvxyb::LinearRgb (for internal pipeline)
+// =============================================================================
+
+impl From<LinearRgbImage> for yuvxyb::LinearRgb {
+    fn from(img: LinearRgbImage) -> Self {
+        yuvxyb::LinearRgb::new(img.data, img.width, img.height)
+            .expect("LinearRgbImage dimensions are always valid")
+    }
+}
+
+impl ToLinearRgb for yuvxyb::Rgb {
+    fn to_linear_rgb(&self) -> LinearRgbImage {
+        // yuvxyb::Rgb handles the sRGB -> linear conversion internally via TryFrom
+        let linear: yuvxyb::LinearRgb = yuvxyb::LinearRgb::try_from(self.clone())
+            .expect("Rgb to LinearRgb conversion should not fail");
+        linear.to_linear_rgb()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_srgb_to_linear_bounds() {
+        assert!((srgb_to_linear(0.0) - 0.0).abs() < 1e-6);
+        assert!((srgb_to_linear(1.0) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_srgb_to_linear_midpoint() {
+        // sRGB 0.5 should be approximately 0.214 in linear
+        let linear = srgb_to_linear(0.5);
+        assert!((linear - 0.214).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_srgb_u8_to_linear() {
+        assert!((srgb_u8_to_linear(0) - 0.0).abs() < 1e-6);
+        assert!((srgb_u8_to_linear(255) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_linear_rgb_image_accessors() {
+        let data = vec![[0.5, 0.3, 0.1], [0.2, 0.4, 0.6]];
+        let img = LinearRgbImage::new(data.clone(), 2, 1);
+
+        assert_eq!(img.width(), 2);
+        assert_eq!(img.height(), 1);
+        assert_eq!(img.data(), &data[..]);
+    }
+
+    #[test]
+    fn test_yuvxyb_linearrgb_roundtrip() {
+        let data = vec![[0.5, 0.3, 0.1]; 4];
+        let yuvxyb_img = yuvxyb::LinearRgb::new(data.clone(), 2, 2).expect("valid dimensions");
+
+        let our_img = yuvxyb_img.to_linear_rgb();
+        assert_eq!(our_img.width(), 2);
+        assert_eq!(our_img.height(), 2);
+        assert_eq!(our_img.data(), &data[..]);
+
+        // Convert back
+        let back: yuvxyb::LinearRgb = our_img.into();
+        assert_eq!(back.data(), &data[..]);
+    }
+}
+
+#[cfg(all(test, feature = "imgref"))]
+mod imgref_tests {
+    use super::*;
+    use imgref::{Img, ImgVec};
+
+    #[test]
+    fn test_imgref_u8_srgb_conversion() {
+        // Create a 2x2 sRGB image
+        let pixels: Vec<[u8; 3]> = vec![
+            [0, 0, 0],       // black
+            [255, 255, 255], // white
+            [128, 128, 128], // mid gray
+            [255, 0, 0],     // red
+        ];
+        let img: ImgVec<[u8; 3]> = Img::new(pixels, 2, 2);
+
+        let linear = img.as_ref().to_linear_rgb();
+        assert_eq!(linear.width(), 2);
+        assert_eq!(linear.height(), 2);
+
+        // Black should be [0, 0, 0]
+        assert!((linear.data()[0][0] - 0.0).abs() < 1e-6);
+        // White should be [1, 1, 1]
+        assert!((linear.data()[1][0] - 1.0).abs() < 1e-6);
+        assert!((linear.data()[1][1] - 1.0).abs() < 1e-6);
+        // Mid gray (sRGB 128) should be ~0.215 in linear
+        assert!((linear.data()[2][0] - 0.215).abs() < 0.01);
+        // Red should have R=1, G=B=0
+        assert!((linear.data()[3][0] - 1.0).abs() < 1e-6);
+        assert!((linear.data()[3][1] - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_imgref_f32_passthrough() {
+        // f32 is assumed to already be linear - should pass through unchanged
+        let pixels: Vec<[f32; 3]> = vec![[0.5, 0.3, 0.1], [0.9, 0.8, 0.7]];
+        let img: ImgVec<[f32; 3]> = Img::new(pixels.clone(), 2, 1);
+
+        let linear = img.as_ref().to_linear_rgb();
+        assert_eq!(linear.data(), &pixels[..]);
+    }
+
+    #[test]
+    fn test_imgref_grayscale_u8_expansion() {
+        // Grayscale u8 should expand to R=G=B and apply sRGB conversion
+        let pixels: Vec<u8> = vec![0, 255, 128];
+        let img: ImgVec<u8> = Img::new(pixels, 3, 1);
+
+        let linear = img.as_ref().to_linear_rgb();
+
+        // Black
+        let black = linear.data()[0];
+        assert!((black[0] - 0.0).abs() < 1e-6);
+        assert_eq!(black[0], black[1]);
+        assert_eq!(black[1], black[2]);
+
+        // White
+        let white = linear.data()[1];
+        assert!((white[0] - 1.0).abs() < 1e-6);
+        assert_eq!(white[0], white[1]);
+
+        // Mid gray
+        let gray = linear.data()[2];
+        assert!((gray[0] - 0.215).abs() < 0.01);
+        assert_eq!(gray[0], gray[1]);
+    }
+
+    #[test]
+    fn test_imgref_grayscale_f32_expansion() {
+        // Grayscale f32 should expand to R=G=B (already linear)
+        let pixels: Vec<f32> = vec![0.0, 1.0, 0.5];
+        let img: ImgVec<f32> = Img::new(pixels, 3, 1);
+
+        let linear = img.as_ref().to_linear_rgb();
+
+        assert_eq!(linear.data()[0], [0.0, 0.0, 0.0]);
+        assert_eq!(linear.data()[1], [1.0, 1.0, 1.0]);
+        assert_eq!(linear.data()[2], [0.5, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_compute_ssimulacra2_with_imgref_u8() {
+        use crate::compute_ssimulacra2;
+
+        // Create two 16x16 images (minimum viable for SSIMULACRA2)
+        let pixels1: Vec<[u8; 3]> = vec![[128, 128, 128]; 16 * 16];
+        let pixels2: Vec<[u8; 3]> = vec![[130, 130, 130]; 16 * 16]; // slightly different
+
+        let img1: ImgVec<[u8; 3]> = Img::new(pixels1, 16, 16);
+        let img2: ImgVec<[u8; 3]> = Img::new(pixels2, 16, 16);
+
+        // Should compute successfully
+        let score = compute_ssimulacra2(img1.as_ref(), img2.as_ref()).unwrap();
+        // Small difference should result in high score (close to 100)
+        assert!(
+            score > 90.0,
+            "Score {score} should be > 90 for very similar images"
+        );
+    }
+
+    #[test]
+    fn test_compute_ssimulacra2_identical_imgref() {
+        use crate::compute_ssimulacra2;
+
+        // Identical images should score 100
+        let pixels: Vec<[u8; 3]> = vec![[100, 150, 200]; 16 * 16];
+        let img: ImgVec<[u8; 3]> = Img::new(pixels, 16, 16);
+
+        let score = compute_ssimulacra2(img.as_ref(), img.as_ref()).unwrap();
+        assert!(
+            (score - 100.0).abs() < 0.01,
+            "Identical images should score 100, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_precompute_with_imgref() {
+        use crate::Ssimulacra2Reference;
+
+        // Create source and distorted images
+        let source_pixels: Vec<[u8; 3]> = vec![[128, 128, 128]; 32 * 32];
+        let distorted_pixels: Vec<[u8; 3]> = vec![[130, 128, 126]; 32 * 32];
+
+        let source: ImgVec<[u8; 3]> = Img::new(source_pixels, 32, 32);
+        let distorted: ImgVec<[u8; 3]> = Img::new(distorted_pixels, 32, 32);
+
+        // Use precompute API with imgref
+        let reference = Ssimulacra2Reference::new(source.as_ref()).unwrap();
+        let score = reference.compare(distorted.as_ref()).unwrap();
+
+        // Should compute successfully with reasonable score
+        assert!(
+            score > 80.0,
+            "Score {score} should be > 80 for similar images"
+        );
+    }
+}

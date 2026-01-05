@@ -1,9 +1,14 @@
-//! Unsafe SIMD XYB conversion using raw x86 intrinsics
+//! SIMD XYB conversion using x86 intrinsics
 //!
-//! This module provides the fastest XYB conversion using direct AVX2/SSE intrinsics.
+//! This module provides fast XYB conversion using:
+//! - `safe_unaligned_simd` for safe memory load/store operations
+//! - Safe SIMD arithmetic (Rust 1.87+)
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+
+#[cfg(target_arch = "x86_64")]
+use safe_unaligned_simd::x86_64 as safe_simd;
 
 // XYB color space constants
 const K_M02: f32 = 0.078f32;
@@ -89,9 +94,10 @@ unsafe fn linear_rgb_to_xyb_avx2(input: &mut [[f32; 3]]) {
             b_arr[i] = p[2];
         }
 
-        let r = _mm256_loadu_ps(r_arr.as_ptr());
-        let g = _mm256_loadu_ps(g_arr.as_ptr());
-        let b = _mm256_loadu_ps(b_arr.as_ptr());
+        // Safe loads via safe_unaligned_simd (array refs, not raw pointers)
+        let r = safe_simd::_mm256_loadu_ps(&r_arr);
+        let g = safe_simd::_mm256_loadu_ps(&g_arr);
+        let b = safe_simd::_mm256_loadu_ps(&b_arr);
 
         // Matrix multiply with FMA: mixed = M * rgb + bias
         let mixed0 = _mm256_fmadd_ps(
@@ -119,9 +125,10 @@ unsafe fn linear_rgb_to_xyb_avx2(input: &mut [[f32; 3]]) {
         let mut m0_arr = [0.0f32; 8];
         let mut m1_arr = [0.0f32; 8];
         let mut m2_arr = [0.0f32; 8];
-        _mm256_storeu_ps(m0_arr.as_mut_ptr(), mixed0);
-        _mm256_storeu_ps(m1_arr.as_mut_ptr(), mixed1);
-        _mm256_storeu_ps(m2_arr.as_mut_ptr(), mixed2);
+        // Safe stores via safe_unaligned_simd
+        safe_simd::_mm256_storeu_ps(&mut m0_arr, mixed0);
+        safe_simd::_mm256_storeu_ps(&mut m1_arr, mixed1);
+        safe_simd::_mm256_storeu_ps(&mut m2_arr, mixed2);
 
         for i in 0..8 {
             m0_arr[i] = cbrtf_fast(m0_arr[i]);
@@ -129,22 +136,23 @@ unsafe fn linear_rgb_to_xyb_avx2(input: &mut [[f32; 3]]) {
             m2_arr[i] = cbrtf_fast(m2_arr[i]);
         }
 
-        let mixed0 = _mm256_add_ps(_mm256_loadu_ps(m0_arr.as_ptr()), absorb_bias);
-        let mixed1 = _mm256_add_ps(_mm256_loadu_ps(m1_arr.as_ptr()), absorb_bias);
-        let mixed2 = _mm256_add_ps(_mm256_loadu_ps(m2_arr.as_ptr()), absorb_bias);
+        // Safe loads
+        let mixed0 = _mm256_add_ps(safe_simd::_mm256_loadu_ps(&m0_arr), absorb_bias);
+        let mixed1 = _mm256_add_ps(safe_simd::_mm256_loadu_ps(&m1_arr), absorb_bias);
+        let mixed2 = _mm256_add_ps(safe_simd::_mm256_loadu_ps(&m2_arr), absorb_bias);
 
         // Convert to XYB
         let x = _mm256_mul_ps(half, _mm256_sub_ps(mixed0, mixed1));
         let y = _mm256_mul_ps(half, _mm256_add_ps(mixed0, mixed1));
         let b_out = mixed2;
 
-        // Store back
+        // Safe stores
         let mut x_arr = [0.0f32; 8];
         let mut y_arr = [0.0f32; 8];
         let mut b_arr = [0.0f32; 8];
-        _mm256_storeu_ps(x_arr.as_mut_ptr(), x);
-        _mm256_storeu_ps(y_arr.as_mut_ptr(), y);
-        _mm256_storeu_ps(b_arr.as_mut_ptr(), b_out);
+        safe_simd::_mm256_storeu_ps(&mut x_arr, x);
+        safe_simd::_mm256_storeu_ps(&mut y_arr, y);
+        safe_simd::_mm256_storeu_ps(&mut b_arr, b_out);
 
         for i in 0..8 {
             input[base + i] = [x_arr[i], y_arr[i], b_arr[i]];

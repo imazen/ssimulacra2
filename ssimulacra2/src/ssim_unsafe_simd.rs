@@ -1,9 +1,12 @@
-//! Unsafe SIMD implementation of SSIM map and edge diff map
+//! SIMD implementation of SSIM map and edge diff map
 //!
-//! Uses raw AVX2/SSE intrinsics for maximum performance.
+//! Uses AVX2/SSE intrinsics with safe memory access via safe_unaligned_simd.
 
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
+
+#[cfg(target_arch = "x86_64")]
+use safe_unaligned_simd::x86_64 as safe_simd;
 
 const C2: f32 = 0.0009f32;
 
@@ -76,11 +79,12 @@ unsafe fn ssim_map_avx2(
         for chunk in 0..chunks_8 {
             let base = chunk * 8;
 
-            let mu1 = _mm256_loadu_ps(m1_plane.as_ptr().add(base));
-            let mu2 = _mm256_loadu_ps(m2_plane.as_ptr().add(base));
-            let sigma11 = _mm256_loadu_ps(s11_plane.as_ptr().add(base));
-            let sigma22 = _mm256_loadu_ps(s22_plane.as_ptr().add(base));
-            let sigma12 = _mm256_loadu_ps(s12_plane.as_ptr().add(base));
+            // Safe loads using first_chunk (Rust 1.77+) + safe_unaligned_simd
+            let mu1 = safe_simd::_mm256_loadu_ps(m1_plane[base..].first_chunk::<8>().unwrap());
+            let mu2 = safe_simd::_mm256_loadu_ps(m2_plane[base..].first_chunk::<8>().unwrap());
+            let sigma11 = safe_simd::_mm256_loadu_ps(s11_plane[base..].first_chunk::<8>().unwrap());
+            let sigma22 = safe_simd::_mm256_loadu_ps(s22_plane[base..].first_chunk::<8>().unwrap());
+            let sigma12 = safe_simd::_mm256_loadu_ps(s12_plane[base..].first_chunk::<8>().unwrap());
 
             // mu11 = mu1 * mu1
             let mu11 = _mm256_mul_ps(mu1, mu1);
@@ -246,10 +250,11 @@ unsafe fn edge_diff_map_avx2(
         for chunk in 0..chunks_8 {
             let base = chunk * 8;
 
-            let row1 = _mm256_loadu_ps(img1_plane.as_ptr().add(base));
-            let rowm1 = _mm256_loadu_ps(mu1_plane.as_ptr().add(base));
-            let row2 = _mm256_loadu_ps(img2_plane.as_ptr().add(base));
-            let rowm2 = _mm256_loadu_ps(mu2_plane.as_ptr().add(base));
+            // Safe loads
+            let row1 = safe_simd::_mm256_loadu_ps(img1_plane[base..].first_chunk::<8>().unwrap());
+            let rowm1 = safe_simd::_mm256_loadu_ps(mu1_plane[base..].first_chunk::<8>().unwrap());
+            let row2 = safe_simd::_mm256_loadu_ps(img2_plane[base..].first_chunk::<8>().unwrap());
+            let rowm2 = safe_simd::_mm256_loadu_ps(mu2_plane[base..].first_chunk::<8>().unwrap());
 
             // edge1 = |row1 - rowm1|
             let diff1 = _mm256_sub_ps(row1, rowm1);
