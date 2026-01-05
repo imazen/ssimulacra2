@@ -94,9 +94,21 @@ unsafe fn linear_rgb_to_xyb_avx2(input: &mut [[f32; 3]]) {
         let b = _mm256_loadu_ps(b_arr.as_ptr());
 
         // Matrix multiply with FMA: mixed = M * rgb + bias
-        let mixed0 = _mm256_fmadd_ps(m00, r, _mm256_fmadd_ps(m01, g, _mm256_fmadd_ps(m02, b, bias)));
-        let mixed1 = _mm256_fmadd_ps(m10, r, _mm256_fmadd_ps(m11, g, _mm256_fmadd_ps(m12, b, bias)));
-        let mixed2 = _mm256_fmadd_ps(m20, r, _mm256_fmadd_ps(m21, g, _mm256_fmadd_ps(m22, b, bias)));
+        let mixed0 = _mm256_fmadd_ps(
+            m00,
+            r,
+            _mm256_fmadd_ps(m01, g, _mm256_fmadd_ps(m02, b, bias)),
+        );
+        let mixed1 = _mm256_fmadd_ps(
+            m10,
+            r,
+            _mm256_fmadd_ps(m11, g, _mm256_fmadd_ps(m12, b, bias)),
+        );
+        let mixed2 = _mm256_fmadd_ps(
+            m20,
+            r,
+            _mm256_fmadd_ps(m21, g, _mm256_fmadd_ps(m22, b, bias)),
+        );
 
         // Clamp to zero
         let mixed0 = _mm256_max_ps(mixed0, zero);

@@ -2,9 +2,7 @@
 //!
 //! Run with: cargo run --release --example profile_unsafe_simd
 
-use ssimulacra2::{
-    compute_frame_ssimulacra2_with_config, Blur, BlurImpl, Ssimulacra2Config,
-};
+use ssimulacra2::{compute_frame_ssimulacra2_with_config, Blur, BlurImpl, Ssimulacra2Config};
 use std::time::Instant;
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
@@ -51,7 +49,13 @@ fn create_test_images(width: usize, height: usize) -> (Rgb, Rgb) {
     (source, distorted)
 }
 
-fn benchmark_config(name: &str, config: Ssimulacra2Config, source: &Rgb, distorted: &Rgb, iterations: usize) -> f64 {
+fn benchmark_config(
+    name: &str,
+    config: Ssimulacra2Config,
+    source: &Rgb,
+    distorted: &Rgb,
+    iterations: usize,
+) -> f64 {
     // Warmup
     for _ in 0..3 {
         let _ = compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), config);
@@ -60,7 +64,8 @@ fn benchmark_config(name: &str, config: Ssimulacra2Config, source: &Rgb, distort
     let start = Instant::now();
     let mut score = 0.0;
     for _ in 0..iterations {
-        score = compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), config).unwrap();
+        score = compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), config)
+            .unwrap();
     }
     let elapsed = start.elapsed();
     let ms_per_iter = elapsed.as_secs_f64() * 1000.0 / iterations as f64;
@@ -77,16 +82,37 @@ fn main() {
     let iterations = 20;
 
     for (width, height) in sizes {
-        println!("Image size: {}x{} ({} iterations)", width, height, iterations);
+        println!(
+            "Image size: {}x{} ({} iterations)",
+            width, height, iterations
+        );
         println!("{:-<60}", "");
 
         let (source, distorted) = create_test_images(width, height);
 
-        let scalar_ms = benchmark_config("Scalar", Ssimulacra2Config::scalar(), &source, &distorted, iterations);
-        let simd_ms = benchmark_config("SIMD (wide)", Ssimulacra2Config::simd(), &source, &distorted, iterations);
+        let scalar_ms = benchmark_config(
+            "Scalar",
+            Ssimulacra2Config::scalar(),
+            &source,
+            &distorted,
+            iterations,
+        );
+        let simd_ms = benchmark_config(
+            "SIMD (wide)",
+            Ssimulacra2Config::simd(),
+            &source,
+            &distorted,
+            iterations,
+        );
 
         #[cfg(feature = "unsafe-simd")]
-        let unsafe_ms = benchmark_config("Unsafe SIMD", Ssimulacra2Config::unsafe_simd(), &source, &distorted, iterations);
+        let unsafe_ms = benchmark_config(
+            "Unsafe SIMD",
+            Ssimulacra2Config::unsafe_simd(),
+            &source,
+            &distorted,
+            iterations,
+        );
 
         println!();
         println!("  Speedups vs Scalar:");
@@ -115,7 +141,10 @@ fn blur_profile(width: usize, height: usize) {
         vec![0.5f32; width * height],
     ];
 
-    println!("Blur (per 3-channel blur operation, {} iterations):", iterations);
+    println!(
+        "Blur (per 3-channel blur operation, {} iterations):",
+        iterations
+    );
 
     // Scalar blur
     let mut blur_scalar = Blur::with_impl(width, height, BlurImpl::Scalar);
@@ -133,7 +162,11 @@ fn blur_profile(width: usize, height: usize) {
         let _ = blur_simd.blur(&planar);
     }
     let simd_ms = start.elapsed().as_secs_f64() * 1000.0 / iterations as f64;
-    println!("  SIMD (wide):     {:.3}ms ({:.2}x vs scalar)", simd_ms, scalar_ms / simd_ms);
+    println!(
+        "  SIMD (wide):     {:.3}ms ({:.2}x vs scalar)",
+        simd_ms,
+        scalar_ms / simd_ms
+    );
 
     #[cfg(feature = "unsafe-simd")]
     {
@@ -143,8 +176,12 @@ fn blur_profile(width: usize, height: usize) {
             let _ = blur_unsafe.blur(&planar);
         }
         let unsafe_ms = start.elapsed().as_secs_f64() * 1000.0 / iterations as f64;
-        println!("  Unsafe SIMD:     {:.3}ms ({:.2}x vs scalar, {:.2}x vs SIMD)",
-                 unsafe_ms, scalar_ms / unsafe_ms, simd_ms / unsafe_ms);
+        println!(
+            "  Unsafe SIMD:     {:.3}ms ({:.2}x vs scalar, {:.2}x vs SIMD)",
+            unsafe_ms,
+            scalar_ms / unsafe_ms,
+            simd_ms / unsafe_ms
+        );
     }
 
     // Test mixed configurations to identify component bottlenecks
@@ -153,7 +190,7 @@ fn blur_profile(width: usize, height: usize) {
 }
 
 fn mixed_config_analysis(width: usize, height: usize) {
-    use ssimulacra2::{XybImpl, ComputeImpl};
+    use ssimulacra2::{ComputeImpl, XybImpl};
 
     let iterations = 20;
     let (source, distorted) = create_test_images(width, height);
@@ -166,7 +203,8 @@ fn mixed_config_analysis(width: usize, height: usize) {
         xyb: XybImpl::Simd,
         compute: ComputeImpl::Simd,
     };
-    let all_simd_ms = benchmark_config("All SIMD", config_all_simd, &source, &distorted, iterations);
+    let all_simd_ms =
+        benchmark_config("All SIMD", config_all_simd, &source, &distorted, iterations);
 
     #[cfg(feature = "unsafe-simd")]
     {
@@ -176,7 +214,13 @@ fn mixed_config_analysis(width: usize, height: usize) {
             xyb: XybImpl::Simd,
             compute: ComputeImpl::Simd,
         };
-        let unsafe_blur_ms = benchmark_config("Unsafe blur only", config_unsafe_blur, &source, &distorted, iterations);
+        let unsafe_blur_ms = benchmark_config(
+            "Unsafe blur only",
+            config_unsafe_blur,
+            &source,
+            &distorted,
+            iterations,
+        );
 
         // Only unsafe XYB
         let config_unsafe_xyb = Ssimulacra2Config {
@@ -184,7 +228,13 @@ fn mixed_config_analysis(width: usize, height: usize) {
             xyb: XybImpl::UnsafeSimd,
             compute: ComputeImpl::Simd,
         };
-        let unsafe_xyb_ms = benchmark_config("Unsafe XYB only", config_unsafe_xyb, &source, &distorted, iterations);
+        let unsafe_xyb_ms = benchmark_config(
+            "Unsafe XYB only",
+            config_unsafe_xyb,
+            &source,
+            &distorted,
+            iterations,
+        );
 
         // Only unsafe compute
         let config_unsafe_compute = Ssimulacra2Config {
@@ -192,17 +242,41 @@ fn mixed_config_analysis(width: usize, height: usize) {
             xyb: XybImpl::Simd,
             compute: ComputeImpl::UnsafeSimd,
         };
-        let unsafe_compute_ms = benchmark_config("Unsafe compute only", config_unsafe_compute, &source, &distorted, iterations);
+        let unsafe_compute_ms = benchmark_config(
+            "Unsafe compute only",
+            config_unsafe_compute,
+            &source,
+            &distorted,
+            iterations,
+        );
 
         // All unsafe
         let config_all_unsafe = Ssimulacra2Config::unsafe_simd();
-        let all_unsafe_ms = benchmark_config("All Unsafe SIMD", config_all_unsafe, &source, &distorted, iterations);
+        let all_unsafe_ms = benchmark_config(
+            "All Unsafe SIMD",
+            config_all_unsafe,
+            &source,
+            &distorted,
+            iterations,
+        );
 
         println!();
         println!("Component contribution to speedup (vs all SIMD):");
-        println!("  Blur:    {:.1}ms saved ({:.1}%)", all_simd_ms - unsafe_blur_ms, (all_simd_ms - unsafe_blur_ms) / (all_simd_ms - all_unsafe_ms) * 100.0);
-        println!("  XYB:     {:.1}ms saved ({:.1}%)", all_simd_ms - unsafe_xyb_ms, (all_simd_ms - unsafe_xyb_ms) / (all_simd_ms - all_unsafe_ms) * 100.0);
-        println!("  Compute: {:.1}ms saved ({:.1}%)", all_simd_ms - unsafe_compute_ms, (all_simd_ms - unsafe_compute_ms) / (all_simd_ms - all_unsafe_ms) * 100.0);
+        println!(
+            "  Blur:    {:.1}ms saved ({:.1}%)",
+            all_simd_ms - unsafe_blur_ms,
+            (all_simd_ms - unsafe_blur_ms) / (all_simd_ms - all_unsafe_ms) * 100.0
+        );
+        println!(
+            "  XYB:     {:.1}ms saved ({:.1}%)",
+            all_simd_ms - unsafe_xyb_ms,
+            (all_simd_ms - unsafe_xyb_ms) / (all_simd_ms - all_unsafe_ms) * 100.0
+        );
+        println!(
+            "  Compute: {:.1}ms saved ({:.1}%)",
+            all_simd_ms - unsafe_compute_ms,
+            (all_simd_ms - unsafe_compute_ms) / (all_simd_ms - all_unsafe_ms) * 100.0
+        );
         println!("  Total:   {:.1}ms saved", all_simd_ms - all_unsafe_ms);
     }
 }

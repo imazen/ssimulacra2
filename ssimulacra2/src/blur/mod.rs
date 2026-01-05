@@ -106,31 +106,47 @@ impl Blur {
         ]
     }
 
-    fn blur_plane(&mut self, plane: &[f32]) -> Vec<f32> {
-        match self.impl_type {
-            BlurImpl::Scalar => self.blur_plane_scalar(plane),
-            BlurImpl::Simd => self.blur_plane_simd(plane),
-            #[cfg(feature = "unsafe-simd")]
-            BlurImpl::UnsafeSimd => self.blur_plane_unsafe_simd(plane),
-        }
+    /// Blur the given image into pre-allocated output buffers (zero-allocation).
+    pub fn blur_into(&mut self, img: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
+        self.blur_plane_into(&img[0], &mut out[0]);
+        self.blur_plane_into(&img[1], &mut out[1]);
+        self.blur_plane_into(&img[2], &mut out[2]);
     }
 
-    fn blur_plane_scalar(&mut self, plane: &[f32]) -> Vec<f32> {
+    fn blur_plane(&mut self, plane: &[f32]) -> Vec<f32> {
         let mut out = vec![0f32; self.width * self.height];
-        self.scalar_kernel
-            .horizontal_pass(plane, &mut self.scalar_temp, self.width);
-        self.scalar_kernel
-            .vertical_pass_chunked::<128, 32>(&self.scalar_temp, &mut out, self.width, self.height);
+        self.blur_plane_into(plane, &mut out);
         out
     }
 
-    fn blur_plane_simd(&mut self, plane: &[f32]) -> Vec<f32> {
-        self.simd.blur_single_plane(plane, self.width, self.height)
+    fn blur_plane_into(&mut self, plane: &[f32], out: &mut [f32]) {
+        match self.impl_type {
+            BlurImpl::Scalar => self.blur_plane_scalar_into(plane, out),
+            BlurImpl::Simd => self.blur_plane_simd_into(plane, out),
+            #[cfg(feature = "unsafe-simd")]
+            BlurImpl::UnsafeSimd => self.blur_plane_unsafe_simd_into(plane, out),
+        }
+    }
+
+    fn blur_plane_scalar_into(&mut self, plane: &[f32], out: &mut [f32]) {
+        self.scalar_kernel
+            .horizontal_pass(plane, &mut self.scalar_temp, self.width);
+        self.scalar_kernel.vertical_pass_chunked::<128, 32>(
+            &self.scalar_temp,
+            out,
+            self.width,
+            self.height,
+        );
+    }
+
+    fn blur_plane_simd_into(&mut self, plane: &[f32], out: &mut [f32]) {
+        self.simd
+            .blur_single_plane_into(plane, out, self.width, self.height);
     }
 
     #[cfg(feature = "unsafe-simd")]
-    fn blur_plane_unsafe_simd(&mut self, plane: &[f32]) -> Vec<f32> {
+    fn blur_plane_unsafe_simd_into(&mut self, plane: &[f32], out: &mut [f32]) {
         self.unsafe_simd
-            .blur_single_plane(plane, self.width, self.height)
+            .blur_single_plane_into(plane, out, self.width, self.height);
     }
 }

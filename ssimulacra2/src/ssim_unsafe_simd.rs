@@ -134,7 +134,8 @@ unsafe fn ssim_map_avx2(
 
             let num_m = f64::from(mu_diff).mul_add(-f64::from(mu_diff), 1.0f64);
             let num_s = 2f64.mul_add(f64::from(s12_plane[x] - mu12), f64::from(C2));
-            let denom_s = f64::from(s11_plane[x] - mu11) + f64::from(s22_plane[x] - mu22) + f64::from(C2);
+            let denom_s =
+                f64::from(s11_plane[x] - mu11) + f64::from(s22_plane[x] - mu22) + f64::from(C2);
             let mut d = 1.0f64 - (num_m * num_s) / denom_s;
             d = d.max(0.0);
             sum_d += d;

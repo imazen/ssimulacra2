@@ -80,17 +80,26 @@ impl UnsafeSimdGaussian {
 
     /// Main entry point - blur a single plane
     pub fn blur_single_plane(&mut self, plane: &[f32], width: usize, height: usize) -> Vec<f32> {
-        debug_assert!(width * height <= self.temp.data.len());
-
         let mut out = vec![0.0f32; width * height];
+        self.blur_single_plane_into(plane, &mut out, width, height);
+        out
+    }
+
+    /// Blur into a pre-allocated output buffer (zero-allocation)
+    pub fn blur_single_plane_into(
+        &mut self,
+        plane: &[f32],
+        out: &mut [f32],
+        width: usize,
+        height: usize,
+    ) {
+        debug_assert!(width * height <= self.temp.data.len());
 
         // Horizontal pass - writes to temp buffer
         self.horizontal_pass(plane, width, height);
 
         // Vertical pass with SIMD - reads from temp, writes to out
-        self.vertical_pass_simd(&mut out, width, height);
-
-        out
+        self.vertical_pass_simd(out, width, height);
     }
 
     /// Horizontal pass - process each row independently
@@ -104,7 +113,6 @@ impl UnsafeSimdGaussian {
             }
         }
     }
-
 
     /// SIMD vertical pass - process columns in parallel
     /// Uses compile-time feature detection for maximum performance
@@ -144,9 +152,8 @@ impl UnsafeSimdGaussian {
         static AVX2_FMA_AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
         let has_avx512 = *AVX512_AVAILABLE.get_or_init(|| is_x86_feature_detected!("avx512f"));
-        let has_avx2_fma = *AVX2_FMA_AVAILABLE.get_or_init(|| {
-            is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma")
-        });
+        let has_avx2_fma = *AVX2_FMA_AVAILABLE
+            .get_or_init(|| is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma"));
 
         let mut x = 0;
 
@@ -221,7 +228,10 @@ impl UnsafeSimdGaussian {
                 let ptr = input.add(top as usize * width + x_offset);
                 // Prefetch next rows
                 if top + 4 < height_i {
-                    _mm_prefetch(input.add((top as usize + 4) * width + x_offset) as *const i8, _MM_HINT_T0);
+                    _mm_prefetch(
+                        input.add((top as usize + 4) * width + x_offset) as *const i8,
+                        _MM_HINT_T0,
+                    );
                 }
                 _mm512_loadu_ps(ptr)
             } else {
@@ -308,7 +318,10 @@ impl UnsafeSimdGaussian {
                 let ptr = input.add(top as usize * width + x_offset);
                 // Prefetch 4 rows ahead
                 if top + 4 < height_i {
-                    _mm_prefetch(input.add((top as usize + 4) * width + x_offset) as *const i8, _MM_HINT_T0);
+                    _mm_prefetch(
+                        input.add((top as usize + 4) * width + x_offset) as *const i8,
+                        _MM_HINT_T0,
+                    );
                 }
                 _mm256_loadu_ps(ptr)
             } else {
@@ -559,7 +572,9 @@ fn horizontal_row_unsafe(input: *const f32, output: *mut f32, width: usize) {
 
         if n >= 0 {
             // SAFETY: n is checked to be >= 0 and < width_i
-            unsafe { *output.offset(n) = out_1 + out_3 + out_5; }
+            unsafe {
+                *output.offset(n) = out_1 + out_3 + out_5;
+            }
         }
 
         n += 1;

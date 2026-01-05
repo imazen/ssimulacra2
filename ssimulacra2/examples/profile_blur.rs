@@ -33,8 +33,16 @@ fn main() {
     let v_time = start.elapsed().as_secs_f64() * 1000.0 / iterations as f64;
 
     println!("Blur Pass Breakdown ({}x{}):", width, height);
-    println!("  Horizontal: {:.3} ms ({:.1}%)", h_time, h_time / (h_time + v_time) * 100.0);
-    println!("  Vertical:   {:.3} ms ({:.1}%)", v_time, v_time / (h_time + v_time) * 100.0);
+    println!(
+        "  Horizontal: {:.3} ms ({:.1}%)",
+        h_time,
+        h_time / (h_time + v_time) * 100.0
+    );
+    println!(
+        "  Vertical:   {:.3} ms ({:.1}%)",
+        v_time,
+        v_time / (h_time + v_time) * 100.0
+    );
     println!("  Total:      {:.3} ms", h_time + v_time);
 }
 
@@ -51,7 +59,10 @@ const MUL_PREV2_5: f32 = -1.0;
 
 fn horizontal_pass(input: &[f32], output: &mut [f32], width: usize, height: usize) {
     for y in 0..height {
-        horizontal_row(&input[y * width..(y + 1) * width], &mut output[y * width..(y + 1) * width]);
+        horizontal_row(
+            &input[y * width..(y + 1) * width],
+            &mut output[y * width..(y + 1) * width],
+        );
     }
 }
 
@@ -131,13 +142,17 @@ fn vertical_pass(input: &[f32], output: &mut [f32], width: usize, height: usize)
     #[cfg(target_arch = "x86_64")]
     if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
         while x + 8 <= width {
-            unsafe { vertical_column_avx2(input, output, width, height, x); }
+            unsafe {
+                vertical_column_avx2(input, output, width, height, x);
+            }
             x += 8;
         }
     }
 
     while x + 4 <= width {
-        unsafe { vertical_column_sse2(input, output, width, height, x); }
+        unsafe {
+            vertical_column_sse2(input, output, width, height, x);
+        }
         x += 4;
     }
 
@@ -149,7 +164,13 @@ fn vertical_pass(input: &[f32], output: &mut [f32], width: usize, height: usize)
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2", enable = "fma")]
-unsafe fn vertical_column_avx2(input: &[f32], output: &mut [f32], width: usize, height: usize, x: usize) {
+unsafe fn vertical_column_avx2(
+    input: &[f32],
+    output: &mut [f32],
+    width: usize,
+    height: usize,
+    x: usize,
+) {
     let big_n = RADIUS;
     let height_i = height as isize;
 
@@ -213,7 +234,13 @@ unsafe fn vertical_column_avx2(input: &[f32], output: &mut [f32], width: usize, 
 }
 
 #[target_feature(enable = "sse2")]
-unsafe fn vertical_column_sse2(input: &[f32], output: &mut [f32], width: usize, height: usize, x: usize) {
+unsafe fn vertical_column_sse2(
+    input: &[f32],
+    output: &mut [f32],
+    width: usize,
+    height: usize,
+    x: usize,
+) {
     let big_n = RADIUS;
     let height_i = height as isize;
 
@@ -276,7 +303,13 @@ unsafe fn vertical_column_sse2(input: &[f32], output: &mut [f32], width: usize, 
     }
 }
 
-fn vertical_column_scalar(input: &[f32], output: &mut [f32], width: usize, height: usize, x: usize) {
+fn vertical_column_scalar(
+    input: &[f32],
+    output: &mut [f32],
+    width: usize,
+    height: usize,
+    x: usize,
+) {
     let big_n = RADIUS;
     let height_i = height as isize;
 

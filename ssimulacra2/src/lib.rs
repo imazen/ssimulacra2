@@ -172,11 +172,19 @@ where
     let mut width = img1.width();
     let mut height = img1.height();
 
-    let mut mul = [
-        vec![0.0f32; width * height],
-        vec![0.0f32; width * height],
-        vec![0.0f32; width * height],
-    ];
+    // Pre-allocate reusable buffers (sized for initial dimensions, shrunk per scale)
+    let alloc_plane = || vec![0.0f32; width * height];
+    let alloc_3planes = || [alloc_plane(), alloc_plane(), alloc_plane()];
+
+    let mut mul = alloc_3planes();
+    let mut sigma1_sq = alloc_3planes();
+    let mut sigma2_sq = alloc_3planes();
+    let mut sigma12 = alloc_3planes();
+    let mut mu1 = alloc_3planes();
+    let mut mu2 = alloc_3planes();
+    let mut img1_planar = alloc_3planes();
+    let mut img2_planar = alloc_3planes();
+
     let mut blur = Blur::with_impl(width, height, config.blur);
     let mut msssim = Msssim::default();
 
@@ -191,8 +199,22 @@ where
             width = img1.width();
             height = img2.height();
         }
-        for c in &mut mul {
-            c.truncate(width * height);
+
+        // Shrink all buffers to current scale size
+        let size = width * height;
+        for buf in [
+            &mut mul,
+            &mut sigma1_sq,
+            &mut sigma2_sq,
+            &mut sigma12,
+            &mut mu1,
+            &mut mu2,
+            &mut img1_planar,
+            &mut img2_planar,
+        ] {
+            for c in buf.iter_mut() {
+                c.truncate(size);
+            }
         }
         blur.shrink_to(width, height);
 
@@ -202,20 +224,20 @@ where
         make_positive_xyb(&mut img1_xyb);
         make_positive_xyb(&mut img2_xyb);
 
-        let img1_planar = xyb_to_planar(&img1_xyb);
-        let img2_planar = xyb_to_planar(&img2_xyb);
+        xyb_to_planar_into(&img1_xyb, &mut img1_planar);
+        xyb_to_planar_into(&img2_xyb, &mut img2_planar);
 
         image_multiply(&img1_planar, &img1_planar, &mut mul, config.compute);
-        let sigma1_sq = blur.blur(&mul);
+        blur.blur_into(&mul, &mut sigma1_sq);
 
         image_multiply(&img2_planar, &img2_planar, &mut mul, config.compute);
-        let sigma2_sq = blur.blur(&mul);
+        blur.blur_into(&mul, &mut sigma2_sq);
 
         image_multiply(&img1_planar, &img2_planar, &mut mul, config.compute);
-        let sigma12 = blur.blur(&mul);
+        blur.blur_into(&mul, &mut sigma12);
 
-        let mu1 = blur.blur(&img1_planar);
-        let mu2 = blur.blur(&img2_planar);
+        blur.blur_into(&img1_planar, &mut mu1);
+        blur.blur_into(&img2_planar, &mut mu2);
 
         let avg_ssim = ssim_map(
             width,
@@ -286,22 +308,27 @@ pub(crate) fn make_positive_xyb(xyb: &mut Xyb) {
 // Note: xyb_to_planar doesn't benefit much from AVX2 due to complex RGB3 deinterleaving
 // The scalar version is already well-optimized by the compiler
 pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
-    let mut out1 = vec![0.0f32; xyb.width() * xyb.height()];
-    let mut out2 = vec![0.0f32; xyb.width() * xyb.height()];
-    let mut out3 = vec![0.0f32; xyb.width() * xyb.height()];
-    for (((i, o1), o2), o3) in xyb
+    let size = xyb.width() * xyb.height();
+    let mut out = [vec![0.0f32; size], vec![0.0f32; size], vec![0.0f32; size]];
+    xyb_to_planar_into(xyb, &mut out);
+    out
+}
+
+/// Convert XYB to planar format into pre-allocated buffers (zero-allocation)
+pub(crate) fn xyb_to_planar_into(xyb: &Xyb, out: &mut [Vec<f32>; 3]) {
+    let [out0, out1, out2] = out;
+    for (((i, o0), o1), o2) in xyb
         .data()
         .iter()
         .copied()
+        .zip(out0.iter_mut())
         .zip(out1.iter_mut())
         .zip(out2.iter_mut())
-        .zip(out3.iter_mut())
     {
-        *o1 = i[0];
-        *o2 = i[1];
-        *o3 = i[2];
+        *o0 = i[0];
+        *o1 = i[1];
+        *o2 = i[2];
     }
-    [out1, out2, out3]
 }
 
 pub(crate) fn image_multiply(

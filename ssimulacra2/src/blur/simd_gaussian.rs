@@ -12,6 +12,9 @@ mod consts {
 use multiversion::multiversion;
 
 pub struct SimdGaussian {
+    // Pre-allocated temp buffer for horizontal pass output (avoids allocations)
+    temp_buffer: Vec<f32>,
+    max_size: usize,
     // Pre-allocated buffers for vertical pass (avoids allocations)
     prev_buffer: Vec<f32>,
     prev2_buffer: Vec<f32>,
@@ -19,32 +22,65 @@ pub struct SimdGaussian {
 }
 
 impl SimdGaussian {
-    pub fn new(_max_width: usize) -> Self {
-        // Allocate for max columns we'll process (128 columns = 32 SIMD lanes of 4)
+    pub fn new(max_width: usize) -> Self {
+        // Pre-allocate for maximum expected image size
+        const MAX_HEIGHT: usize = 4096;
         const MAX_COLUMNS: usize = 128;
+        let max_size = max_width * MAX_HEIGHT;
         Self {
+            temp_buffer: vec![0.0; max_size],
+            max_size,
             prev_buffer: vec![0.0; 3 * MAX_COLUMNS],
             prev2_buffer: vec![0.0; 3 * MAX_COLUMNS],
             out_buffer: vec![0.0; 3 * MAX_COLUMNS],
         }
     }
 
-    pub fn shrink_to(&mut self, _width: usize, _height: usize) {
-        // Buffers are pre-allocated to max size, just reuse them
+    pub fn shrink_to(&mut self, width: usize, height: usize) {
+        // Grow temp buffer if needed, never shrink (to avoid realloc)
+        let needed = width * height;
+        if needed > self.max_size {
+            self.temp_buffer.resize(needed, 0.0);
+            self.max_size = needed;
+        }
     }
 
     /// Public API matching other blur implementations
     pub fn blur_single_plane(&mut self, plane: &[f32], width: usize, height: usize) -> Vec<f32> {
-        let mut temp = vec![0.0; width * height];
         let mut out = vec![0.0; width * height];
-
-        // Horizontal pass
-        Self::horizontal_pass(plane, &mut temp, width);
-
-        // Vertical pass with SIMD
-        self.vertical_pass_simd_chunked(&temp, &mut out, width, height);
-
+        self.blur_single_plane_into(plane, &mut out, width, height);
         out
+    }
+
+    /// Blur into a pre-allocated output buffer (zero-allocation)
+    pub fn blur_single_plane_into(
+        &mut self,
+        plane: &[f32],
+        out: &mut [f32],
+        width: usize,
+        height: usize,
+    ) {
+        let size = width * height;
+
+        // Ensure temp buffer is large enough
+        if size > self.max_size {
+            self.temp_buffer.resize(size, 0.0);
+            self.max_size = size;
+        }
+
+        // Horizontal pass - writes to pre-allocated temp buffer
+        Self::horizontal_pass(plane, &mut self.temp_buffer[..size], width);
+
+        // Vertical pass with SIMD - pass buffers explicitly to avoid borrow conflicts
+        Self::vertical_pass_simd_chunked_with_buffers(
+            &self.temp_buffer[..size],
+            out,
+            width,
+            height,
+            &mut self.prev_buffer,
+            &mut self.prev2_buffer,
+            &mut self.out_buffer,
+        );
     }
 
     /// Horizontal pass - same as baseline (IIR is inherently sequential)
@@ -126,12 +162,14 @@ impl SimdGaussian {
 
     /// SIMD-optimized vertical pass
     /// Processes 4 columns at a time using f32x4
-    pub fn vertical_pass_simd_chunked(
-        &mut self,
+    fn vertical_pass_simd_chunked_with_buffers(
         input: &[f32],
         output: &mut [f32],
         width: usize,
         height: usize,
+        prev_buffer: &mut [f32],
+        prev2_buffer: &mut [f32],
+        out_buffer: &mut [f32],
     ) {
         assert_eq!(input.len(), output.len());
 
@@ -144,9 +182,9 @@ impl SimdGaussian {
                 &mut output[x..],
                 width,
                 height,
-                &mut self.prev_buffer[..3 * 128],
-                &mut self.prev2_buffer[..3 * 128],
-                &mut self.out_buffer[..3 * 128],
+                &mut prev_buffer[..3 * 128],
+                &mut prev2_buffer[..3 * 128],
+                &mut out_buffer[..3 * 128],
             );
             x += 128;
         }
@@ -158,9 +196,9 @@ impl SimdGaussian {
                 &mut output[x..],
                 width,
                 height,
-                &mut self.prev_buffer[..3 * 32],
-                &mut self.prev2_buffer[..3 * 32],
-                &mut self.out_buffer[..3 * 32],
+                &mut prev_buffer[..3 * 32],
+                &mut prev2_buffer[..3 * 32],
+                &mut out_buffer[..3 * 32],
             );
             x += 32;
         }
@@ -172,16 +210,16 @@ impl SimdGaussian {
                 &mut output[x..],
                 width,
                 height,
-                &mut self.prev_buffer[..3 * 4],
-                &mut self.prev2_buffer[..3 * 4],
-                &mut self.out_buffer[..3 * 4],
+                &mut prev_buffer[..3 * 4],
+                &mut prev2_buffer[..3 * 4],
+                &mut out_buffer[..3 * 4],
             );
             x += 4;
         }
 
         // Handle remaining columns with scalar version
         while x < width {
-            self.vertical_pass_scalar::<1>(&input[x..], &mut output[x..], width, height);
+            Self::vertical_pass_scalar_static::<1>(&input[x..], &mut output[x..], width, height);
             x += 1;
         }
     }
@@ -303,9 +341,8 @@ impl SimdGaussian {
         }
     }
 
-    /// Scalar fallback for remaining columns
-    fn vertical_pass_scalar<const COLUMNS: usize>(
-        &mut self,
+    /// Scalar fallback for remaining columns (static version)
+    fn vertical_pass_scalar_static<const COLUMNS: usize>(
         input: &[f32],
         output: &mut [f32],
         width: usize,

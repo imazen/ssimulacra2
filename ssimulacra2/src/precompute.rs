@@ -201,7 +201,12 @@ impl Ssim2Reference {
             let sigma2_sq = blur.blur(&mul);
 
             // Compute sigma12 = blur(img1 * img2) - cross-term
-            image_multiply(&scale_data.img1_planar, &img2_planar, &mut mul, ComputeImpl::default());
+            image_multiply(
+                &scale_data.img1_planar,
+                &img2_planar,
+                &mut mul,
+                ComputeImpl::default(),
+            );
             let sigma12 = blur.blur(&mul);
 
             // Use precomputed mu1 and sigma1_sq from reference

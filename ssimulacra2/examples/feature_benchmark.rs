@@ -95,7 +95,10 @@ fn main() {
     let (source, distorted) = create_test_image_512x512();
     let iterations = 50;
 
-    println!("Running benchmarks with {} iterations each...\n", iterations);
+    println!(
+        "Running benchmarks with {} iterations each...\n",
+        iterations
+    );
     println!(
         "{:<25} {:>10} {:>10} {:>10} {:>12}",
         "Configuration", "Mean (ms)", "Median", "P95", "Score"

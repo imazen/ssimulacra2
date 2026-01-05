@@ -1,7 +1,6 @@
 /// SIMD-optimized operations for SSIMULACRA2 computation
 ///
 /// Uses the `wide` crate for portable SIMD across x86 (SSE/AVX) and ARM (NEON)
-
 use multiversion::multiversion;
 use wide::f32x16;
 

@@ -35,14 +35,8 @@ fn main() {
 
         // Test configurations
         let configs = [
-            (
-                "Scalar (baseline)",
-                Ssimulacra2Config::scalar(),
-            ),
-            (
-                "SIMD (safe wide crate)",
-                Ssimulacra2Config::simd(),
-            ),
+            ("Scalar (baseline)", Ssimulacra2Config::scalar()),
+            ("SIMD (safe wide crate)", Ssimulacra2Config::simd()),
             #[cfg(feature = "unsafe-simd")]
             (
                 "Unsafe SIMD (raw intrinsics)",
@@ -72,7 +66,8 @@ fn main() {
             .unwrap();
 
             // Warmup
-            let _ = compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), *config);
+            let _ =
+                compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), *config);
 
             // Time the computation
             let start = Instant::now();
@@ -120,7 +115,10 @@ fn main() {
             .fold(0.0f64, f64::max);
 
         if max_diff < 0.001 {
-            println!("  Scores match within tolerance (max diff: {:.6})", max_diff);
+            println!(
+                "  Scores match within tolerance (max diff: {:.6})",
+                max_diff
+            );
         } else {
             println!("  WARNING: Score difference: {:.6}", max_diff);
         }
