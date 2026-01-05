@@ -118,14 +118,6 @@ fn main() {
         "SIMD (wide crate)", mean, median, p95, score
     );
 
-    // SIMD with transpose blur
-    let config = Ssimulacra2Config::simd_transpose();
-    let (mean, median, p95, score) = benchmark_config(&source, &distorted, config, iterations);
-    println!(
-        "{:<25} {:>10.3} {:>10.3} {:>10.3} {:>12.6}",
-        "SIMD + Transpose Blur", mean, median, p95, score
-    );
-
     // Unsafe SIMD (raw intrinsics)
     #[cfg(feature = "unsafe-simd")]
     {

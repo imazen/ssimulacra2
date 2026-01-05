@@ -85,16 +85,6 @@ impl Ssimulacra2Config {
         }
     }
 
-    /// Configuration using transpose-optimized blur with SIMD compute
-    /// Better cache locality for blur, may be faster on some systems
-    pub fn simd_transpose() -> Self {
-        Self {
-            blur: BlurImpl::SimdTranspose,
-            xyb: XybImpl::Simd,
-            compute: ComputeImpl::Simd,
-        }
-    }
-
     /// Configuration using unsafe SIMD for all operations (fastest)
     #[cfg(feature = "unsafe-simd")]
     pub fn unsafe_simd() -> Self {

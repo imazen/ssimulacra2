@@ -1,13 +1,11 @@
 mod gaussian;
 mod simd_gaussian;
-mod transpose_gaussian;
 
 #[cfg(feature = "unsafe-simd")]
 mod unsafe_simd_gaussian;
 
 use gaussian::RecursiveGaussian;
 use simd_gaussian::SimdGaussian;
-use transpose_gaussian::TransposeGaussian;
 
 #[cfg(feature = "unsafe-simd")]
 use unsafe_simd_gaussian::UnsafeSimdGaussian;
@@ -20,8 +18,6 @@ pub enum BlurImpl {
     /// Safe SIMD via wide crate
     #[default]
     Simd,
-    /// Transpose-optimized blur (better cache locality, uses f32)
-    SimdTranspose,
     /// Raw x86 intrinsics (fastest, experimental)
     #[cfg(feature = "unsafe-simd")]
     UnsafeSimd,
@@ -33,7 +29,6 @@ impl BlurImpl {
         match self {
             BlurImpl::Scalar => "scalar",
             BlurImpl::Simd => "simd (wide crate)",
-            BlurImpl::SimdTranspose => "simd-transpose (cache-optimized)",
             #[cfg(feature = "unsafe-simd")]
             BlurImpl::UnsafeSimd => "unsafe-simd (raw intrinsics)",
         }
@@ -45,7 +40,6 @@ impl BlurImpl {
 /// Supports runtime switching between:
 /// - Scalar: f64 IIR baseline (most accurate)
 /// - SIMD: Safe SIMD via wide crate
-/// - SimdTranspose: Transpose-optimized for cache locality
 /// - UnsafeSimd: Raw x86 intrinsics (fastest)
 pub struct Blur {
     width: usize,
@@ -56,8 +50,6 @@ pub struct Blur {
     scalar_temp: Vec<f32>,
     // Safe SIMD backend
     simd: SimdGaussian,
-    // Transpose-optimized backend
-    transpose: TransposeGaussian,
     // Unsafe SIMD backend
     #[cfg(feature = "unsafe-simd")]
     unsafe_simd: UnsafeSimdGaussian,
@@ -80,7 +72,6 @@ impl Blur {
             scalar_kernel: RecursiveGaussian,
             scalar_temp: vec![0.0f32; width * height],
             simd: SimdGaussian::new(width),
-            transpose: TransposeGaussian::new(width, height),
             #[cfg(feature = "unsafe-simd")]
             unsafe_simd: UnsafeSimdGaussian::new(width),
         }
@@ -100,7 +91,6 @@ impl Blur {
     pub fn shrink_to(&mut self, width: usize, height: usize) {
         self.scalar_temp.truncate(width * height);
         self.simd.shrink_to(width, height);
-        self.transpose.shrink_to(width, height);
         #[cfg(feature = "unsafe-simd")]
         self.unsafe_simd.shrink_to(width, height);
         self.width = width;
@@ -120,7 +110,6 @@ impl Blur {
         match self.impl_type {
             BlurImpl::Scalar => self.blur_plane_scalar(plane),
             BlurImpl::Simd => self.blur_plane_simd(plane),
-            BlurImpl::SimdTranspose => self.blur_plane_transpose(plane),
             #[cfg(feature = "unsafe-simd")]
             BlurImpl::UnsafeSimd => self.blur_plane_unsafe_simd(plane),
         }
@@ -137,11 +126,6 @@ impl Blur {
 
     fn blur_plane_simd(&mut self, plane: &[f32]) -> Vec<f32> {
         self.simd.blur_single_plane(plane, self.width, self.height)
-    }
-
-    fn blur_plane_transpose(&mut self, plane: &[f32]) -> Vec<f32> {
-        self.transpose
-            .blur_single_plane(plane, self.width, self.height)
     }
 
     #[cfg(feature = "unsafe-simd")]

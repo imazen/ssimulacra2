@@ -36,7 +36,7 @@ fn create_test_image(width: usize, height: usize, seed: u64) -> Rgb {
 fn benchmark_blur(width: usize, height: usize, impl_type: BlurImpl, iterations: usize) -> f64 {
     // Create test plane
     let plane: Vec<f32> = (0..width * height)
-        .map(|i| (i as f32 / (width * height) as f32))
+        .map(|i| i as f32 / (width * height) as f32)
         .collect();
 
     let mut blur = Blur::with_impl(width, height, impl_type);
@@ -96,15 +96,14 @@ fn main() {
     // Blur-only benchmarks
     println!("Blur-only benchmark (3 planes):");
     println!(
-        "{:20} {:>12} {:>12} {:>12} {:>12}",
-        "Size", "Scalar", "SIMD", "Transpose", "Unsafe"
+        "{:20} {:>12} {:>12} {:>12}",
+        "Size", "Scalar", "SIMD", "Unsafe"
     );
-    println!("{:-<75}", "");
+    println!("{:-<60}", "");
 
     for (width, height, name, iters) in sizes.iter() {
         let scalar_ms = benchmark_blur(*width, *height, BlurImpl::Scalar, *iters);
         let simd_ms = benchmark_blur(*width, *height, BlurImpl::Simd, *iters);
-        let transpose_ms = benchmark_blur(*width, *height, BlurImpl::SimdTranspose, *iters);
 
         #[cfg(feature = "unsafe-simd")]
         let unsafe_ms = benchmark_blur(*width, *height, BlurImpl::UnsafeSimd, *iters);
@@ -112,17 +111,17 @@ fn main() {
         let unsafe_ms = f64::NAN;
 
         println!(
-            "{:20} {:>12.3} {:>12.3} {:>12.3} {:>12.3}",
-            name, scalar_ms, simd_ms, transpose_ms, unsafe_ms
+            "{:20} {:>12.3} {:>12.3} {:>12.3}",
+            name, scalar_ms, simd_ms, unsafe_ms
         );
     }
 
     println!("\nFull SSIMULACRA2 benchmark:");
     println!(
-        "{:20} {:>12} {:>12} {:>12} {:>12}",
-        "Size", "Scalar", "SIMD", "Transpose", "Unsafe"
+        "{:20} {:>12} {:>12} {:>12}",
+        "Size", "Scalar", "SIMD", "Unsafe"
     );
-    println!("{:-<75}", "");
+    println!("{:-<60}", "");
 
     for (width, height, name, iters) in sizes.iter() {
         let iters = iters / 2;
@@ -130,8 +129,6 @@ fn main() {
         let scalar_ms =
             benchmark_full_ssimulacra2(*width, *height, Ssimulacra2Config::scalar(), iters);
         let simd_ms = benchmark_full_ssimulacra2(*width, *height, Ssimulacra2Config::simd(), iters);
-        let transpose_ms =
-            benchmark_full_ssimulacra2(*width, *height, Ssimulacra2Config::simd_transpose(), iters);
 
         #[cfg(feature = "unsafe-simd")]
         let unsafe_ms =
@@ -140,8 +137,8 @@ fn main() {
         let unsafe_ms = f64::NAN;
 
         println!(
-            "{:20} {:>12.3} {:>12.3} {:>12.3} {:>12.3}",
-            name, scalar_ms, simd_ms, transpose_ms, unsafe_ms
+            "{:20} {:>12.3} {:>12.3} {:>12.3}",
+            name, scalar_ms, simd_ms, unsafe_ms
         );
     }
 
