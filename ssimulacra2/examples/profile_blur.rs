@@ -140,20 +140,22 @@ fn vertical_pass(input: &[f32], output: &mut [f32], width: usize, height: usize)
     let mut x = 0;
 
     #[cfg(target_arch = "x86_64")]
-    if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
-        while x + 8 <= width {
-            unsafe {
-                vertical_column_avx2(input, output, width, height, x);
+    {
+        if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+            while x + 8 <= width {
+                unsafe {
+                    vertical_column_avx2(input, output, width, height, x);
+                }
+                x += 8;
             }
-            x += 8;
         }
-    }
 
-    while x + 4 <= width {
-        unsafe {
-            vertical_column_sse2(input, output, width, height, x);
+        while x + 4 <= width {
+            unsafe {
+                vertical_column_sse2(input, output, width, height, x);
+            }
+            x += 4;
         }
-        x += 4;
     }
 
     while x < width {
@@ -233,6 +235,7 @@ unsafe fn vertical_column_avx2(
     }
 }
 
+#[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "sse2")]
 unsafe fn vertical_column_sse2(
     input: &[f32],
