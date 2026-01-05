@@ -10,7 +10,7 @@ exclude = ["test_data"]
 license = "BSD-2-Clause"
 
 # When changing MSRV: Also update README and .github/workflows/rust.yml
-rust-version = "1.65.0"
+rust-version = "1.89.0"
 
 [dependencies]
 multiversion = "0.7"
@@ -41,6 +41,10 @@ unsafe-simd = [] # Raw x86 intrinsics (faster, experimental)
 [[bench]]
 name = "benches"
 harness = false
+
+[lints.rust]
+# Silence warnings from multiversion macro's retpoline feature checks
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(target_feature, values(\"retpoline\", \"retpoline-indirect-branches\", \"retpoline-indirect-calls\"))"] }
 
 [lints.clippy]
 uninlined_format_args = "allow"

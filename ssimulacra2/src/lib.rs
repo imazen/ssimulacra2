@@ -270,7 +270,7 @@ where
 /// Convert LinearRgb to Xyb using the specified implementation
 fn linear_rgb_to_xyb(linear_rgb: LinearRgb, impl_type: XybImpl) -> Xyb {
     match impl_type {
-        XybImpl::Scalar => Xyb::try_from(linear_rgb).expect("XYB conversion should not fail"),
+        XybImpl::Scalar => Xyb::from(linear_rgb),
         XybImpl::Simd => {
             let width = linear_rgb.width();
             let height = linear_rgb.height();
@@ -394,8 +394,8 @@ pub(crate) fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
     const SCALE: usize = 2;
     let in_w = in_data.width();
     let in_h = in_data.height();
-    let out_w = (in_w + SCALE - 1) / SCALE;
-    let out_h = (in_h + SCALE - 1) / SCALE;
+    let out_w = in_w.div_ceil(SCALE);
+    let out_h = in_h.div_ceil(SCALE);
     let mut out_data = vec![[0.0f32; 3]; out_w * out_h];
 
     let in_data = &in_data.data();
@@ -420,6 +420,7 @@ pub(crate) fn downscale_by_2(in_data: &LinearRgb) -> LinearRgb {
     LinearRgb::new(out_data, out_w, out_h).expect("Resolution and data size match")
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn ssim_map(
     width: usize,
     height: usize,

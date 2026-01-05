@@ -23,6 +23,7 @@ use multiversion::multiversion;
 
 /// Aligned buffer for SIMD operations (64-byte cache line alignment)
 #[repr(C, align(64))]
+#[allow(dead_code)]
 struct AlignedF32([f32; 16]); // 64 bytes = 16 f32s
 
 struct AlignedBuffer {
@@ -49,6 +50,7 @@ impl AlignedBuffer {
     }
 }
 
+#[allow(dead_code)]
 pub struct UnsafeSimdGaussian {
     // Pre-allocated buffers (64-byte aligned for cache efficiency)
     temp: AlignedBuffer,
@@ -79,6 +81,7 @@ impl UnsafeSimdGaussian {
     }
 
     /// Main entry point - blur a single plane
+    #[allow(dead_code)]
     pub fn blur_single_plane(&mut self, plane: &[f32], width: usize, height: usize) -> Vec<f32> {
         let mut out = vec![0.0f32; width * height];
         self.blur_single_plane_into(plane, &mut out, width, height);

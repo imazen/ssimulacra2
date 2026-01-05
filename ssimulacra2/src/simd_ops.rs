@@ -155,9 +155,8 @@ pub fn ssim_map_simd(
                 let d = d.max(zero_simd);
 
                 // Extract values and accumulate in f64 for precision
-                let d_arr = d.to_array();
-                for i in 0..16 {
-                    let d_f64 = f64::from(d_arr[i]);
+                for d_val in d.to_array() {
+                    let d_f64 = f64::from(d_val);
                     sum1[0] += d_f64;
                     sum1[1] += d_f64.powi(4);
                 }
@@ -400,9 +399,7 @@ pub fn image_multiply_simd(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut
             let result = p1 * p2;
             let result_arr = result.to_array();
 
-            for j in 0..16 {
-                out_plane[i + j] = result_arr[j];
-            }
+            out_plane[i..i + 16].copy_from_slice(&result_arr);
 
             i += 16;
         }

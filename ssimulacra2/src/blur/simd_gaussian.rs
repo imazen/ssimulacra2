@@ -46,6 +46,7 @@ impl SimdGaussian {
     }
 
     /// Public API matching other blur implementations
+    #[allow(dead_code)]
     pub fn blur_single_plane(&mut self, plane: &[f32], width: usize, height: usize) -> Vec<f32> {
         let mut out = vec![0.0; width * height];
         self.blur_single_plane_into(plane, &mut out, width, height);
@@ -236,7 +237,7 @@ impl SimdGaussian {
         prev2: &mut [f32],
         out: &mut [f32],
     ) {
-        assert!(COLUMNS % 4 == 0, "COLUMNS must be multiple of 4 for SIMD");
+        assert!(COLUMNS.is_multiple_of(4), "COLUMNS must be multiple of 4 for SIMD");
         assert_eq!(input.len(), output.len());
         assert_eq!(prev.len(), 3 * COLUMNS);
         assert_eq!(prev2.len(), 3 * COLUMNS);
@@ -312,24 +313,21 @@ impl SimdGaussian {
                 let out3 = sum.mul_add(mul_in_3, -out3);
                 let out5 = sum.mul_add(mul_in_5, -out5);
 
-                // Store outputs (use array indexing)
+                // Store outputs using slice copies
                 let out1_arr = out1.to_array();
                 let out3_arr = out3.to_array();
                 let out5_arr = out5.to_array();
 
-                for j in 0..4 {
-                    out[i1 + j] = out1_arr[j];
-                    out[i3 + j] = out3_arr[j];
-                    out[i5 + j] = out5_arr[j];
-                }
+                out[i1..i1 + 4].copy_from_slice(&out1_arr);
+                out[i3..i3 + 4].copy_from_slice(&out3_arr);
+                out[i5..i5 + 4].copy_from_slice(&out5_arr);
 
                 // Write final output if we're past the padding
                 if n >= 0 {
                     let result = out1 + out3 + out5;
                     let result_arr = result.to_array();
-                    for j in 0..4 {
-                        output[n as usize * width + i + j] = result_arr[j];
-                    }
+                    let out_start = n as usize * width + i;
+                    output[out_start..out_start + 4].copy_from_slice(&result_arr);
                 }
             }
 
