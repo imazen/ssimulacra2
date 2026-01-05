@@ -2,15 +2,12 @@
 ///
 /// Uses the `wide` crate for portable SIMD across x86 (SSE/AVX) and ARM (NEON)
 
-#[cfg(feature = "simd-ops")]
 use multiversion::multiversion;
-#[cfg(feature = "simd-ops")]
 use wide::f32x16;
 
 /// SIMD-optimized SSIM map computation
 ///
 /// Processes 16 pixels at once using f32x16, then accumulates in f64 for precision
-#[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub fn ssim_map_simd(
@@ -197,7 +194,6 @@ pub fn ssim_map_simd(
 }
 
 /// SIMD-optimized edge difference map computation
-#[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub fn edge_diff_map_simd(
@@ -354,7 +350,6 @@ pub fn edge_diff_map_simd(
 }
 
 /// SIMD-optimized image multiplication
-#[cfg(feature = "simd-ops")]
 #[inline(always)]
 #[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 pub fn image_multiply_simd(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
@@ -418,39 +413,4 @@ pub fn image_multiply_simd(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut
             out_plane[i] = plane1[i] * plane2[i];
         }
     }
-}
-
-/// SIMD-optimized deinterleave from [[f32; 3]] to [Vec<f32>; 3]
-#[cfg(feature = "simd-ops")]
-#[inline(always)]
-#[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
-pub fn xyb_to_planar_simd(data: &[[f32; 3]], width: usize, height: usize) -> [Vec<f32>; 3] {
-    let len = width * height;
-    let mut out0 = vec![0.0f32; len];
-    let mut out1 = vec![0.0f32; len];
-    let mut out2 = vec![0.0f32; len];
-
-    let mut i = 0;
-
-    // Process 16 pixels at once
-    while i + 16 <= len {
-        // Deinterleave 16 pixels directly - safe version (compiler should elide bounds checks)
-        for j in 0..16 {
-            let p = data[i + j];
-            out0[i + j] = p[0];
-            out1[i + j] = p[1];
-            out2[i + j] = p[2];
-        }
-
-        i += 16;
-    }
-
-    // Handle remainder
-    for i in i..len {
-        out0[i] = data[i][0];
-        out1[i] = data[i][1];
-        out2[i] = data[i][2];
-    }
-
-    [out0, out1, out2]
 }

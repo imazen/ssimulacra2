@@ -1,22 +1,12 @@
-//! Comprehensive benchmark comparing all feature combinations on 512x512 images
+//! Comprehensive benchmark comparing all runtime implementation configurations
 //!
 //! Run with:
 //! ```bash
-//! # Single-threaded baselines
-//! cargo run --release --no-default-features --features blur-accurate --example feature_benchmark
-//! cargo run --release --no-default-features --features blur-transpose --example feature_benchmark
-//! cargo run --release --no-default-features --features blur-simd --example feature_benchmark
-//!
-//! # With SIMD ops
-//! cargo run --release --no-default-features --features blur-transpose,simd-ops --example feature_benchmark
-//! cargo run --release --no-default-features --features blur-simd,simd-ops --example feature_benchmark
-//!
-//! # With rayon (multi-threaded)
-//! cargo run --release --features blur-transpose,rayon --example feature_benchmark
-//! cargo run --release --features blur-simd,simd-ops,rayon --example feature_benchmark
+//! cargo run --release --example feature_benchmark
+//! cargo run --release --example feature_benchmark --features unsafe-simd
 //! ```
 
-use ssimulacra2::compute_frame_ssimulacra2;
+use ssimulacra2::{compute_frame_ssimulacra2_with_config, Ssimulacra2Config};
 use std::time::Instant;
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
@@ -67,17 +57,24 @@ fn create_test_image_512x512() -> (Rgb, Rgb) {
     (source, distorted)
 }
 
-fn benchmark_with_warmup(source: &Rgb, distorted: &Rgb, iterations: usize) -> (f64, f64, f64) {
+fn benchmark_config(
+    source: &Rgb,
+    distorted: &Rgb,
+    config: Ssimulacra2Config,
+    iterations: usize,
+) -> (f64, f64, f64, f64) {
     // Warmup
     for _ in 0..3 {
-        let _ = compute_frame_ssimulacra2(source.clone(), distorted.clone()).unwrap();
+        let _ = compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), config);
     }
 
     // Actual benchmark
     let mut times = Vec::with_capacity(iterations);
+    let mut score = 0.0;
     for _ in 0..iterations {
         let start = Instant::now();
-        let _score = compute_frame_ssimulacra2(source.clone(), distorted.clone()).unwrap();
+        score = compute_frame_ssimulacra2_with_config(source.clone(), distorted.clone(), config)
+            .unwrap();
         times.push(start.elapsed().as_secs_f64() * 1000.0); // Convert to ms
     }
 
@@ -87,53 +84,61 @@ fn benchmark_with_warmup(source: &Rgb, distorted: &Rgb, iterations: usize) -> (f
     let median = times[times.len() / 2];
     let p95 = times[(times.len() as f32 * 0.95) as usize];
 
-    (mean, median, p95)
+    (mean, median, p95, score)
 }
 
 fn main() {
-    println!("SSIMULACRA2 Feature Benchmark - 512x512 images");
-    println!("==============================================\n");
-
-    // Print active features
-    println!("Active features:");
-    #[cfg(feature = "rayon")]
-    println!("  - rayon (multi-threading)");
-    #[cfg(feature = "blur-accurate")]
-    println!("  - blur-accurate (f64 IIR)");
-    #[cfg(feature = "blur-transpose")]
-    println!("  - blur-transpose (f32 IIR transpose)");
-    #[cfg(feature = "blur-simd")]
-    println!("  - blur-simd (SIMD vertical pass)");
-    #[cfg(feature = "simd-ops")]
-    println!("  - simd-ops (SIMD compute pipeline)");
-    #[cfg(feature = "inaccurate-libblur")]
-    println!("  - inaccurate-libblur");
-
-    #[cfg(not(any(
-        feature = "rayon",
-        feature = "blur-accurate",
-        feature = "blur-transpose",
-        feature = "blur-simd",
-        feature = "simd-ops",
-        feature = "inaccurate-libblur"
-    )))]
-    println!("  - (no features - using blur-accurate fallback)");
-
-    println!();
+    println!("SSIMULACRA2 Runtime Configuration Benchmark - 512x512 images");
+    println!("=============================================================\n");
 
     println!("Creating test images...");
     let (source, distorted) = create_test_image_512x512();
+    let iterations = 50;
 
-    println!("Running benchmark with 100 iterations...\n");
-    let (mean, median, p95) = benchmark_with_warmup(&source, &distorted, 100);
+    println!("Running benchmarks with {} iterations each...\n", iterations);
+    println!(
+        "{:<25} {:>10} {:>10} {:>10} {:>12}",
+        "Configuration", "Mean (ms)", "Median", "P95", "Score"
+    );
+    println!("{:-<70}", "");
 
-    println!("Results:");
-    println!("  Mean:   {:.3} ms", mean);
-    println!("  Median: {:.3} ms", median);
-    println!("  P95:    {:.3} ms", p95);
+    // Scalar baseline
+    let config = Ssimulacra2Config::scalar();
+    let (mean, median, p95, score) = benchmark_config(&source, &distorted, config, iterations);
+    println!(
+        "{:<25} {:>10.3} {:>10.3} {:>10.3} {:>12.6}",
+        "Scalar", mean, median, p95, score
+    );
+
+    // Safe SIMD (wide crate)
+    let config = Ssimulacra2Config::simd();
+    let (mean, median, p95, score) = benchmark_config(&source, &distorted, config, iterations);
+    println!(
+        "{:<25} {:>10.3} {:>10.3} {:>10.3} {:>12.6}",
+        "SIMD (wide crate)", mean, median, p95, score
+    );
+
+    // SIMD with transpose blur
+    let config = Ssimulacra2Config::simd_transpose();
+    let (mean, median, p95, score) = benchmark_config(&source, &distorted, config, iterations);
+    println!(
+        "{:<25} {:>10.3} {:>10.3} {:>10.3} {:>12.6}",
+        "SIMD + Transpose Blur", mean, median, p95, score
+    );
+
+    // Unsafe SIMD (raw intrinsics)
+    #[cfg(feature = "unsafe-simd")]
+    {
+        let config = Ssimulacra2Config::unsafe_simd();
+        let (mean, median, p95, score) = benchmark_config(&source, &distorted, config, iterations);
+        println!(
+            "{:<25} {:>10.3} {:>10.3} {:>10.3} {:>12.6}",
+            "Unsafe SIMD (raw)", mean, median, p95, score
+        );
+    }
+
     println!();
 
-    // Calculate score for verification
-    let score = compute_frame_ssimulacra2(source, distorted).unwrap();
-    println!("SSIMULACRA2 score: {:.6}", score);
+    #[cfg(not(feature = "unsafe-simd"))]
+    println!("Note: Run with --features unsafe-simd to benchmark raw intrinsics path");
 }

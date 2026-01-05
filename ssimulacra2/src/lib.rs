@@ -1,6 +1,7 @@
 mod blur;
 mod precompute;
 pub mod reference_data;
+mod simd_ops;
 mod xyb_simd;
 
 #[cfg(feature = "unsafe-simd")]
@@ -79,6 +80,16 @@ impl Ssimulacra2Config {
     pub fn simd() -> Self {
         Self {
             blur: BlurImpl::Simd,
+            xyb: XybImpl::Simd,
+            compute: ComputeImpl::Simd,
+        }
+    }
+
+    /// Configuration using transpose-optimized blur with SIMD compute
+    /// Better cache locality for blur, may be faster on some systems
+    pub fn simd_transpose() -> Self {
+        Self {
+            blur: BlurImpl::SimdTranspose,
             xyb: XybImpl::Simd,
             compute: ComputeImpl::Simd,
         }
@@ -204,13 +215,13 @@ where
         let img1_planar = xyb_to_planar(&img1_xyb);
         let img2_planar = xyb_to_planar(&img2_xyb);
 
-        image_multiply(&img1_planar, &img1_planar, &mut mul);
+        image_multiply(&img1_planar, &img1_planar, &mut mul, config.compute);
         let sigma1_sq = blur.blur(&mul);
 
-        image_multiply(&img2_planar, &img2_planar, &mut mul);
+        image_multiply(&img2_planar, &img2_planar, &mut mul, config.compute);
         let sigma2_sq = blur.blur(&mul);
 
-        image_multiply(&img1_planar, &img2_planar, &mut mul);
+        image_multiply(&img1_planar, &img2_planar, &mut mul, config.compute);
         let sigma12 = blur.blur(&mul);
 
         let mu1 = blur.blur(&img1_planar);
@@ -303,15 +314,28 @@ pub(crate) fn xyb_to_planar(xyb: &Xyb) -> [Vec<f32>; 3] {
     [out1, out2, out3]
 }
 
-pub(crate) fn image_multiply(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
-    #[cfg(all(feature = "unsafe-simd", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            unsafe { image_multiply_avx2(img1, img2, out) };
-            return;
+pub(crate) fn image_multiply(
+    img1: &[Vec<f32>; 3],
+    img2: &[Vec<f32>; 3],
+    out: &mut [Vec<f32>; 3],
+    impl_type: ComputeImpl,
+) {
+    match impl_type {
+        ComputeImpl::Scalar => image_multiply_scalar(img1, img2, out),
+        ComputeImpl::Simd => simd_ops::image_multiply_simd(img1, img2, out),
+        #[cfg(feature = "unsafe-simd")]
+        ComputeImpl::UnsafeSimd => {
+            #[cfg(target_arch = "x86_64")]
+            {
+                if is_x86_feature_detected!("avx2") {
+                    unsafe { image_multiply_avx2(img1, img2, out) };
+                    return;
+                }
+            }
+            // Fallback to portable SIMD if AVX2 not available
+            simd_ops::image_multiply_simd(img1, img2, out);
         }
     }
-    image_multiply_scalar(img1, img2, out);
 }
 
 fn image_multiply_scalar(img1: &[Vec<f32>; 3], img2: &[Vec<f32>; 3], out: &mut [Vec<f32>; 3]) {
@@ -390,11 +414,12 @@ pub(crate) fn ssim_map(
     impl_type: ComputeImpl,
 ) -> [f64; 3 * 2] {
     match impl_type {
-        ComputeImpl::Scalar | ComputeImpl::Simd => {
-            ssim_map_scalar(width, height, m1, m2, s11, s22, s12)
-        }
+        ComputeImpl::Scalar => ssim_map_scalar(width, height, m1, m2, s11, s22, s12),
+        ComputeImpl::Simd => simd_ops::ssim_map_simd(width, height, m1, m2, s11, s22, s12),
         #[cfg(feature = "unsafe-simd")]
-        ComputeImpl::UnsafeSimd => ssim_unsafe_simd::ssim_map_unsafe(width, height, m1, m2, s11, s22, s12),
+        ComputeImpl::UnsafeSimd => {
+            ssim_unsafe_simd::ssim_map_unsafe(width, height, m1, m2, s11, s22, s12)
+        }
     }
 }
 
@@ -456,9 +481,8 @@ pub(crate) fn edge_diff_map(
     impl_type: ComputeImpl,
 ) -> [f64; 3 * 4] {
     match impl_type {
-        ComputeImpl::Scalar | ComputeImpl::Simd => {
-            edge_diff_map_scalar(width, height, img1, mu1, img2, mu2)
-        }
+        ComputeImpl::Scalar => edge_diff_map_scalar(width, height, img1, mu1, img2, mu2),
+        ComputeImpl::Simd => simd_ops::edge_diff_map_simd(width, height, img1, mu1, img2, mu2),
         #[cfg(feature = "unsafe-simd")]
         ComputeImpl::UnsafeSimd => {
             ssim_unsafe_simd::edge_diff_map_unsafe(width, height, img1, mu1, img2, mu2)
