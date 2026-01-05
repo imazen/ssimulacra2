@@ -24,6 +24,20 @@ These changes come with trade-offs: higher MSRV (1.89.0 vs 1.65.0), more complex
 
 We'd be happy to upstream any of these changes if the rust-av team is interested. The SIMD work is substantial and may not align with their goals, but we're open to collaboration.
 
+## Benchmarks
+
+Full SSIMULACRA2 computation (AMD Ryzen, x86_64):
+
+| Resolution | Scalar | SIMD | Unsafe SIMD |
+|------------|--------|------|-------------|
+| 1920×1080  | 1083ms | 434ms (2.5×) | 370ms (2.9×) |
+| 3840×2160  | 4256ms | 1612ms (2.6×) | 1422ms (3.0×) |
+
+Run your own:
+```bash
+cargo run --release --features "simd unsafe-simd" --example benchmark_unsafe_simd
+```
+
 ## Installation
 
 ```toml

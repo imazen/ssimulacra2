@@ -18,8 +18,8 @@ pub use input::{LinearRgbImage, ToLinearRgb};
 pub use precompute::Ssimulacra2Reference;
 // Re-export commonly used types from yuvxyb for convenience
 pub use yuvxyb::{
-    ColorPrimaries, LinearRgb, MatrixCoefficients, Pixel, Rgb, TransferCharacteristic, Yuv,
-    YuvConfig,
+    ColorPrimaries, Frame, LinearRgb, MatrixCoefficients, Pixel, Plane, Rgb, TransferCharacteristic,
+    Yuv, YuvConfig,
 };
 
 // Re-export sRGB conversion functions for users implementing custom input types
