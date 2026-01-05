@@ -113,6 +113,27 @@ Gaussian blur is the dominant operation (~60% of runtime):
 | 1024x1024 | 35 ms | 8.5 ms | 7.2 ms |
 | 4K | 290 ms | 95 ms | 85 ms |
 
+## Parallelization: Not Beneficial
+
+We evaluated scale-level parallelization (processing all 6 SSIM scales in parallel
+with rayon). Results with unsafe-simd configuration:
+
+| Size | Sequential | Parallel | Speedup | Allocations | Memory |
+|------|------------|----------|---------|-------------|--------|
+| 512x512 | 38.7 ms | 34.5 ms | 1.12x | 58 → 639 | +40% |
+| 1024x1024 | 161.6 ms | 139.4 ms | 1.16x | 58 → 237 | +30% |
+| FHD | 327.0 ms | 280.7 ms | 1.16x | 58 → 237 | +30% |
+| QHD | 547.7 ms | 531.9 ms | 1.03x | 58 → 237 | +30% |
+| 4K | 1706.1 ms | 1380.8 ms | 1.24x | 58 → 237 | +30% |
+
+**Conclusion**: Scale-level parallelism provides only 3-24% speedup while increasing
+memory usage by 30-40% (each parallel task needs its own buffers). The sequential
+unsafe-SIMD implementation is already highly optimized; memory bandwidth becomes
+the bottleneck at larger sizes, limiting parallel gains.
+
+The `rayon` feature remains available for blur row parallelization, but scale-level
+parallelism is not implemented as the trade-off is unfavorable.
+
 ## Build Commands
 
 ```bash
