@@ -146,7 +146,8 @@ fn test_identical_images_exact_score_unsafe_simd() {
 struct RealImageTestCase {
     name: &'static str,
     distorted_file: &'static str,
-    /// Expected score from SIMD implementation (pinned value)
+    /// Expected score from SIMD implementation (pinned value, x86_64 only)
+    #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
     expected_simd: f64,
 }
 
