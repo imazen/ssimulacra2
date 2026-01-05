@@ -2,8 +2,8 @@
 //!
 //! This ensures Scalar, Simd, and UnsafeSimd backends compute the same results.
 
-use image::ImageReader;
 use fast_ssim2::{compute_frame_ssimulacra2_with_config, Ssimulacra2Config};
+use image::ImageReader;
 use std::path::PathBuf;
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 

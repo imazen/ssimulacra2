@@ -9,13 +9,13 @@ use std::{
 
 use av_metrics_decoders::{y4m::new_decoder_from_stdin, Decoder, VapoursynthDecoder};
 use crossterm::tty::IsTty;
-use image::ColorType;
-use indicatif::{HumanDuration, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
-use num_traits::FromPrimitive;
 use fast_ssim2::{
     compute_frame_ssimulacra2, ColorPrimaries, MatrixCoefficients, Pixel, TransferCharacteristic,
     Yuv, YuvConfig,
 };
+use image::ColorType;
+use indicatif::{HumanDuration, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
+use num_traits::FromPrimitive;
 use statrs::statistics::{Data, Distribution, Median, OrderStatistics};
 
 const PROGRESS_CHARS: &str = "█▉▊▋▌▍▎▏  ";

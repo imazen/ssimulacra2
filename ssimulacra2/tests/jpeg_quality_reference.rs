@@ -9,8 +9,8 @@
 //! C++ reference binary: libjxl/build/tools/ssimulacra2
 //! Captured: 2026-01-04
 
-use image::ImageReader;
 use fast_ssim2::{compute_frame_ssimulacra2, Ssimulacra2Config};
+use image::ImageReader;
 use std::path::PathBuf;
 use yuvxyb::Rgb;
 

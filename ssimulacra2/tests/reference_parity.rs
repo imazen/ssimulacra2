@@ -8,9 +8,9 @@
 //!
 //! Run tests with: cargo test --test reference_parity
 
-use sha2::{Digest, Sha256};
 use fast_ssim2::compute_frame_ssimulacra2;
 use fast_ssim2::reference_data::{ReferenceCase, REFERENCE_CASES};
+use sha2::{Digest, Sha256};
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
 // ============================================================================
