@@ -173,7 +173,10 @@ const REAL_IMAGE_CASES: &[RealImageTestCase] = &[
     },
 ];
 
+// Only run on x86_64 since pinned values were captured on that platform.
+// ARM may produce slightly different results due to FP implementation differences.
 #[test]
+#[cfg(target_arch = "x86_64")]
 fn test_simd_scores_pinned_real_images() {
     let source = load_image("source.png");
 
