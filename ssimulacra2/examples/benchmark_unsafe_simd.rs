@@ -6,7 +6,7 @@
 
 use std::time::Instant;
 
-use ssimulacra2::{compute_frame_ssimulacra2_with_config, Blur, SimdImpl, Ssimulacra2Config};
+use fast_ssim2::{compute_frame_ssimulacra2_with_config, Blur, SimdImpl, Ssimulacra2Config};
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
 fn create_test_image(width: usize, height: usize, seed: u64) -> Rgb {

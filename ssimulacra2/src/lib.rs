@@ -16,7 +16,11 @@ mod ssim_unsafe_simd;
 pub use blur::Blur;
 pub use input::{LinearRgbImage, ToLinearRgb};
 pub use precompute::Ssimulacra2Reference;
-pub use yuvxyb::{LinearRgb, Rgb};
+// Re-export commonly used types from yuvxyb for convenience
+pub use yuvxyb::{
+    ColorPrimaries, LinearRgb, MatrixCoefficients, Pixel, Rgb, TransferCharacteristic, Yuv,
+    YuvConfig,
+};
 
 // Re-export sRGB conversion functions for users implementing custom input types
 pub use input::{srgb_to_linear, srgb_u16_to_linear, srgb_u8_to_linear};
@@ -141,7 +145,7 @@ where
 /// # Example
 /// ```ignore
 /// use imgref::ImgVec;
-/// use ssimulacra2::compute_ssimulacra2;
+/// use fast_ssim2::compute_ssimulacra2;
 ///
 /// let source: ImgVec<[u8; 3]> = /* ... */;
 /// let distorted: ImgVec<[u8; 3]> = /* ... */;

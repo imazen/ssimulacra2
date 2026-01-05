@@ -10,7 +10,7 @@
 //! Captured: 2026-01-04
 
 use image::ImageReader;
-use ssimulacra2::{compute_frame_ssimulacra2, Ssimulacra2Config};
+use fast_ssim2::{compute_frame_ssimulacra2, Ssimulacra2Config};
 use std::path::PathBuf;
 use yuvxyb::Rgb;
 
@@ -147,7 +147,7 @@ fn test_jpeg_quality_ordering() {
 
 #[test]
 fn test_jpeg_quality_with_configs() {
-    use ssimulacra2::compute_frame_ssimulacra2_with_config;
+    use fast_ssim2::compute_frame_ssimulacra2_with_config;
 
     let source = load_image("source.png");
     let distorted = load_image("q70.jpg");

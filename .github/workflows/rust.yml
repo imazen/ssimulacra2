@@ -49,10 +49,10 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --features "${{ matrix.features }}" -p ssimulacra2
+        run: cargo build --features "${{ matrix.features }}" -p fast-ssim2
 
       - name: Run tests
-        run: cargo test --features "${{ matrix.features }}" -p ssimulacra2
+        run: cargo test --features "${{ matrix.features }}" -p fast-ssim2
 
   # Test with default features only
   test-default:
@@ -62,9 +62,9 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Build with defaults
-        run: cargo build -p ssimulacra2
+        run: cargo build -p fast-ssim2
       - name: Test with defaults
-        run: cargo test -p ssimulacra2
+        run: cargo test -p fast-ssim2
 
   # Clippy lint check
   clippy:
@@ -76,7 +76,7 @@ jobs:
         with:
           components: clippy
       - name: Clippy
-        run: cargo clippy --features "simd,unsafe-simd,imgref" -p ssimulacra2 -- -D warnings
+        run: cargo clippy --features "simd,unsafe-simd,imgref" -p fast-ssim2 -- -D warnings
 
   # Format check
   fmt:
@@ -98,4 +98,4 @@ jobs:
       - name: Install Rust 1.89.0
         uses: dtolnay/rust-toolchain@1.89.0
       - name: Check MSRV
-        run: cargo check -p ssimulacra2
+        run: cargo check -p fast-ssim2

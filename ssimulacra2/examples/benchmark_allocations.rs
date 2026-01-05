@@ -8,7 +8,7 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-use ssimulacra2::{compute_frame_ssimulacra2_with_config, Ssimulacra2Config};
+use fast_ssim2::{compute_frame_ssimulacra2_with_config, Ssimulacra2Config};
 use yuvxyb::{ColorPrimaries, Rgb, TransferCharacteristic};
 
 // Custom allocator that tracks allocations

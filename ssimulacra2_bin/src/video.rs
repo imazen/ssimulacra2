@@ -12,7 +12,7 @@ use crossterm::tty::IsTty;
 use image::ColorType;
 use indicatif::{HumanDuration, ProgressBar, ProgressDrawTarget, ProgressState, ProgressStyle};
 use num_traits::FromPrimitive;
-use ssimulacra2::{
+use fast_ssim2::{
     compute_frame_ssimulacra2, ColorPrimaries, MatrixCoefficients, Pixel, TransferCharacteristic,
     Yuv, YuvConfig,
 };

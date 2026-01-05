@@ -5,8 +5,8 @@ mod video;
 use self::video::*;
 use clap::{Parser, Subcommand};
 #[cfg(feature = "video")]
-use ssimulacra2::MatrixCoefficients;
-use ssimulacra2::{compute_frame_ssimulacra2, ColorPrimaries, Rgb, TransferCharacteristic};
+use fast_ssim2::MatrixCoefficients;
+use fast_ssim2::{compute_frame_ssimulacra2, ColorPrimaries, Rgb, TransferCharacteristic};
 use std::path::{Path, PathBuf};
 
 #[derive(Parser, Debug)]

@@ -1,5 +1,5 @@
 /// Quick benchmark to compare blur backend performance
-use ssimulacra2::Blur;
+use fast_ssim2::Blur;
 use std::time::Instant;
 
 fn main() {

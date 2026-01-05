@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```
-//! use ssimulacra2::Ssimulacra2Reference;
+//! use fast_ssim2::Ssimulacra2Reference;
 //! use yuvxyb::{Rgb, TransferCharacteristic, ColorPrimaries};
 //!
 //! // Load reference image

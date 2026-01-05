@@ -3,9 +3,9 @@
 //! Run with: cargo run --release --features rayon --example profile_parallel
 
 #[cfg(feature = "rayon")]
-use ssimulacra2::compute_frame_ssimulacra2;
+use fast_ssim2::compute_frame_ssimulacra2;
 #[cfg(feature = "rayon")]
-use ssimulacra2::compute_frame_ssimulacra2_parallel;
+use fast_ssim2::compute_frame_ssimulacra2_parallel;
 #[cfg(feature = "rayon")]
 use std::time::Instant;
 #[cfg(feature = "rayon")]

@@ -1,13 +1,15 @@
 [package]
-name = "ssimulacra2"
-version = "0.5.1"
+name = "fast-ssim2"
+version = "0.6.0"
 edition = "2021"
-description = "Rust implementation of the SSIMULACRA2 metric"
-repository = "https://github.com/rust-av/ssimulacra2"
-homepage = "https://github.com/rust-av/ssimulacra2"
-documentation = "https://docs.rs/ssimulacra2"
+description = "Fast SSIMULACRA2 image quality metric with SIMD acceleration"
+repository = "https://github.com/imazen/ssimulacra2"
+homepage = "https://github.com/imazen/ssimulacra2"
+documentation = "https://docs.rs/fast-ssim2"
 exclude = ["test_data"]
 license = "BSD-2-Clause"
+keywords = ["image", "quality", "ssim", "ssimulacra2", "perceptual"]
+categories = ["multimedia::images", "algorithms"]
 
 # When changing MSRV: Also update README and .github/workflows/rust.yml
 rust-version = "1.89.0"

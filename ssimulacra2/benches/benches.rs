@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use num_traits::clamp;
 use rand::Rng;
-use ssimulacra2::{
+use fast_ssim2::{
     compute_frame_ssimulacra2, Blur, ColorPrimaries, Frame, MatrixCoefficients, Plane,
     TransferCharacteristic, Yuv, YuvConfig,
 };
