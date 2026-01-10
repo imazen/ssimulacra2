@@ -23,32 +23,26 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact: fast-ssim2-linux-x64
-            features: "simd,unsafe-simd,avif"
           # Linux ARM64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             artifact: fast-ssim2-linux-arm64
-            features: "simd,avif"
           # macOS x64
           - os: macos-13
             target: x86_64-apple-darwin
             artifact: fast-ssim2-macos-x64
-            features: "simd,unsafe-simd,avif"
           # macOS ARM64
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: fast-ssim2-macos-arm64
-            features: "simd,avif"
           # Windows x64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: fast-ssim2-windows-x64
-            features: "simd,unsafe-simd,avif"
           # Windows ARM64
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
             artifact: fast-ssim2-windows-arm64
-            features: "simd,avif"
 
     runs-on: ${{ matrix.os }}
 
@@ -60,8 +54,9 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Build CLI with avif support (no video feature to avoid vapoursynth dependency)
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }} --no-default-features --features "${{ matrix.features }}" -p fast-ssim2-cli
+        run: cargo build --release --target ${{ matrix.target }} --no-default-features --features avif -p fast-ssim2-cli
 
       - name: Prepare artifact (Unix)
         if: runner.os != 'Windows'
