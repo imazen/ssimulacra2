@@ -518,7 +518,7 @@ impl UnsafeSimdGaussian {
 /// Uses multiversion for compile-time CPU optimization
 /// # Safety
 /// Caller must ensure input and output pointers are valid for width elements
-#[multiversion(targets("x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
+#[multiversion(targets("x86_64+avx512f+avx512vl", "x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
 fn horizontal_row_unsafe(input: *const f32, output: *mut f32, width: usize) {
     let big_n = consts::RADIUS as isize;
 
