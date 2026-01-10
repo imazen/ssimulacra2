@@ -17,7 +17,7 @@ rust-version = "1.89.0"
 
 [dependencies]
 imgref = { version = "1.12", optional = true }
-multiversion = "0.7"
+multiversion = "0.8"
 num-traits = "0.2.15"
 rayon = { version = "1.5.3", optional = true }
 safe_unaligned_simd = { version = "0.2.3", optional = true }
