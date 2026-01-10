@@ -7,7 +7,6 @@
 //! Original code from: https://github.com/rust-av/yuvxyb
 //! License: BSD-2-Clause
 
-use multiversion::multiversion;
 use wide::{f32x16, f32x8, f64x2};
 
 // XYB color space constants from jpegli
@@ -253,7 +252,7 @@ fn cbrtf_fast(x: f32) -> f32 {
 /// falling back to f32x8 then scalar processing for remainders.
 ///
 /// Input/output: [[R, G, B]] → [[X, Y, B]]
-#[multiversion(targets("x86_64+avx512f+avx512vl", "x86_64+avx2+fma", "x86_64+sse2", "aarch64+neon"))]
+#[inline]
 pub fn linear_rgb_to_xyb_simd(input: &mut [[f32; 3]]) {
     // Precompute the absorbance bias (negated cube root) - use cbrtf_fast to match SIMD
     let absorbance_bias: [f32; 3] = [
