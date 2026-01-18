@@ -4,107 +4,163 @@
 [![Crates.io](https://img.shields.io/crates/v/fast-ssim2?style=for-the-badge)](https://crates.io/crates/fast-ssim2)
 [![LICENSE](https://img.shields.io/crates/l/fast-ssim2?style=for-the-badge)](https://github.com/imazen/ssimulacra2/blob/main/LICENSE)
 
-Rust implementation of the [SSIMULACRA2](https://github.com/cloudinary/ssimulacra2) perceptual image quality metric.
+Fast SIMD-accelerated Rust implementation of [SSIMULACRA2](https://github.com/cloudinary/ssimulacra2), a perceptual image quality metric.
 
-## Attribution
-
-This crate is a fork of [rust-av/ssimulacra2](https://github.com/rust-av/ssimulacra2). Thank you to the rust-av team for creating the original Rust implementation - their clean, well-structured code made it straightforward to build upon.
-
-### What's different
-
-The upstream crate provides a correct, readable scalar implementation. This fork experiments with SIMD acceleration and adds some API conveniences:
-
-- SIMD-accelerated blur and XYB conversion (via `wide` crate and x86 intrinsics)
-- Precomputed reference API for batch comparisons (`Ssimulacra2Reference`)
-- `imgref` type support via `ToLinearRgb` trait
-
-These changes come with trade-offs: higher MSRV (1.89.0 vs 1.65.0), more complex code, and platform-specific behavior. If you prefer simplicity and stability, the upstream crate may be a better fit.
-
-### Contributing back
-
-We'd be happy to upstream any of these changes if the rust-av team is interested. The SIMD work is substantial and may not align with their goals, but we're open to collaboration.
-
-## Benchmarks
-
-Full SSIMULACRA2 computation (AMD Ryzen, x86_64):
-
-| Resolution | Scalar | SIMD | Unsafe SIMD |
-|------------|--------|------|-------------|
-| 1920×1080  | 1083ms | 434ms (2.5×) | 370ms (2.9×) |
-| 3840×2160  | 4256ms | 1612ms (2.6×) | 1422ms (3.0×) |
-
-Run your own:
-```bash
-cargo run --release --features "simd unsafe-simd" --example benchmark_unsafe_simd
-```
-
-## Installation
+## Quick Start
 
 ```toml
 [dependencies]
-fast-ssim2 = "0.6"
+fast-ssim2 = { version = "0.6", features = ["imgref"] }
 ```
-
-## Features
-
-- **`simd`** (default): Safe SIMD via the `wide` crate
-- **`unsafe-simd`** (default): x86_64 intrinsics (faster on supported hardware)
-- **`imgref`**: Support for `imgref` image types
-- **`rayon`**: Parallel computation
-
-## Usage
-
-### With imgref
 
 ```rust
 use fast_ssim2::compute_ssimulacra2;
 use imgref::ImgVec;
 
-let source: ImgVec<[u8; 3]> = /* your image */;
-let distorted: ImgVec<[u8; 3]> = /* distorted version */;
+let source: ImgVec<[u8; 3]> = /* your source image */;
+let distorted: ImgVec<[u8; 3]> = /* compressed/modified version */;
 
 let score = compute_ssimulacra2(source.as_ref(), distorted.as_ref())?;
-// 100 = identical, lower = more different
+// 100 = identical, 90+ = imperceptible, <50 = significant degradation
 ```
 
-### With yuvxyb types
+## Score Interpretation
 
-```rust
-use fast_ssim2::{compute_frame_ssimulacra2, Rgb, TransferCharacteristic, ColorPrimaries};
+| Score | Quality |
+|-------|---------|
+| **100** | Identical |
+| **90+** | Imperceptible difference |
+| **70-90** | Minor, subtle difference |
+| **50-70** | Noticeable difference |
+| **<50** | Significant degradation |
 
-let source = Rgb::new(data, width, height,
-    TransferCharacteristic::SRGB, ColorPrimaries::BT709)?;
-let distorted = Rgb::new(/* ... */)?;
+## API Overview
 
-let score = compute_frame_ssimulacra2(source, distorted)?;
-```
+### Primary Functions
 
-### Precomputed reference (for batch comparisons)
+| Function | Use Case |
+|----------|----------|
+| [`compute_ssimulacra2`](https://docs.rs/fast-ssim2/latest/fast_ssim2/fn.compute_ssimulacra2.html) | Compare two images (recommended) |
+| [`Ssimulacra2Reference::new`](https://docs.rs/fast-ssim2/latest/fast_ssim2/struct.Ssimulacra2Reference.html) | Precompute for batch comparisons (~2x faster) |
+
+### Input Types
+
+With the `imgref` feature:
+
+| Type | Color Space |
+|------|-------------|
+| `ImgRef<[u8; 3]>` | sRGB (8-bit) |
+| `ImgRef<[u16; 3]>` | sRGB (16-bit) |
+| `ImgRef<[f32; 3]>` | Linear RGB |
+| `ImgRef<u8>`, `ImgRef<f32>` | Grayscale |
+
+**Convention:** Integer types = sRGB gamma. Float types = linear RGB.
+
+Without features, use `yuvxyb::Rgb` or `yuvxyb::LinearRgb`, or implement [`ToLinearRgb`](https://docs.rs/fast-ssim2/latest/fast_ssim2/trait.ToLinearRgb.html) for custom types.
+
+## Batch Comparisons
+
+When comparing multiple images against the same reference (e.g., testing compression levels), precompute the reference:
 
 ```rust
 use fast_ssim2::Ssimulacra2Reference;
 
-let reference = Ssimulacra2Reference::new(source)?;
+let reference = Ssimulacra2Reference::new(source.as_ref())?;
 
-for distorted in variants {
-    let score = reference.compare(distorted)?;
+for distorted in compressed_variants {
+    let score = reference.compare(distorted.as_ref())?;
 }
 ```
 
-## Score interpretation
+## Features
 
-| Score | Meaning |
-|-------|---------|
-| 100 | Identical |
-| 90+ | Imperceptible difference |
-| 70-90 | Minor difference |
-| 50-70 | Noticeable |
-| < 50 | Significant degradation |
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `simd` | Yes | Safe SIMD via `wide` crate |
+| `unsafe-simd` | Yes | x86_64 AVX2 intrinsics (fastest) |
+| `imgref` | No | Support for `imgref` image types |
+| `rayon` | No | Parallel computation |
+
+## Performance
+
+Benchmarked on AMD Ryzen (x86_64), full SSIMULACRA2 computation:
+
+| Resolution | Scalar | SIMD | Unsafe SIMD |
+|------------|--------|------|-------------|
+| 1920x1080 | 1083ms | 434ms (2.5x) | 370ms (2.9x) |
+| 3840x2160 | 4256ms | 1612ms (2.6x) | 1422ms (3.0x) |
+
+Run your own benchmarks:
+```bash
+cargo run --release --features "simd unsafe-simd" --example benchmark_unsafe_simd
+```
+
+## Advanced Usage
+
+### Custom Input Types
+
+```rust
+use fast_ssim2::{ToLinearRgb, LinearRgbImage, srgb_u8_to_linear};
+
+struct MyImage { /* ... */ }
+
+impl ToLinearRgb for MyImage {
+    fn to_linear_rgb(&self) -> LinearRgbImage {
+        let data: Vec<[f32; 3]> = self.pixels.iter()
+            .map(|[r, g, b]| [
+                srgb_u8_to_linear(*r),
+                srgb_u8_to_linear(*g),
+                srgb_u8_to_linear(*b),
+            ])
+            .collect();
+        LinearRgbImage::new(data, self.width, self.height)
+    }
+}
+```
+
+### Explicit SIMD Backend
+
+```rust
+use fast_ssim2::{compute_ssimulacra2_with_config, Ssimulacra2Config};
+
+// Force scalar (most portable)
+let score = compute_ssimulacra2_with_config(source, distorted, Ssimulacra2Config::scalar())?;
+
+// Force unsafe SIMD (fastest on x86_64)
+#[cfg(feature = "unsafe-simd")]
+let score = compute_ssimulacra2_with_config(source, distorted, Ssimulacra2Config::unsafe_simd())?;
+```
+
+### Using yuvxyb Types Directly
+
+```rust
+use fast_ssim2::{compute_ssimulacra2, Rgb, TransferCharacteristic, ColorPrimaries};
+
+let source = Rgb::new(
+    pixel_data,
+    width,
+    height,
+    TransferCharacteristic::SRGB,
+    ColorPrimaries::BT709,
+)?;
+let score = compute_ssimulacra2(source, distorted)?;
+```
+
+## Requirements
+
+- **Minimum image size:** 8x8 pixels
+- **MSRV:** 1.89.0
+
+## Attribution
+
+Fork of [rust-av/ssimulacra2](https://github.com/rust-av/ssimulacra2). Thank you to the rust-av team for the original implementation.
+
+**What's different:** SIMD acceleration (via `wide` crate and x86 intrinsics), precomputed reference API, `imgref` support. These come with trade-offs: higher MSRV and more complex code.
 
 ## License
 
 BSD-2-Clause (same as upstream)
 
-## Notes
+---
 
 Developed with assistance from Claude (Anthropic). Tested against the C++ reference implementation.

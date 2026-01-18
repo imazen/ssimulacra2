@@ -99,7 +99,7 @@ fn gen_checkerboard(width: usize, height: usize, cell_size: usize) -> Vec<u8> {
     let mut data = Vec::with_capacity(width * height * 3);
     for y in 0..height {
         for x in 0..width {
-            let val = if ((x / cell_size) + (y / cell_size)) % 2 == 0 {
+            let val = if ((x / cell_size) + (y / cell_size)).is_multiple_of(2) {
                 255
             } else {
                 0
@@ -133,12 +133,10 @@ fn gen_edge(width: usize, height: usize, vertical: bool) -> Vec<u8> {
                 } else {
                     255
                 }
+            } else if y < height / 2 {
+                0
             } else {
-                if y < height / 2 {
-                    0
-                } else {
-                    255
-                }
+                255
             };
             data.extend_from_slice(&[val, val, val]);
         }
@@ -424,16 +422,15 @@ fn test_reference_parity() {
         {
             // SIMD implementations use different rounding than C++ reference
             0.5 // Allow larger variance for these patterns
-        } else if case.name.contains("_vs_") {
-            0.01 // Non-identical synthetic patterns
-        } else if case.name.starts_with("perfect_match")
+        } else if case.name.contains("_vs_")
+            || case.name.starts_with("perfect_match")
             || case.name.starts_with("gradient_h_")
             || case.name.starts_with("gradient_v_")
             || case.name.starts_with("checkerboard_")
             || case.name.starts_with("noise_seed_")
             || case.name.starts_with("edge_")
         {
-            0.01 // These should be close
+            0.01 // Synthetic patterns and non-identical comparisons should be close
         } else {
             0.05 // Fallback for any other patterns
         };
@@ -593,10 +590,7 @@ fn test_reference_parity() {
         } else {
             "other"
         };
-        pattern_errors
-            .entry(pattern)
-            .or_insert_with(Vec::new)
-            .push(case.error);
+        pattern_errors.entry(pattern).or_default().push(case.error);
     }
 
     println!(

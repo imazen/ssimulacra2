@@ -35,8 +35,8 @@ features = ["bitmap_backend", "area_series", "ttf"]
 optional = true
 
 [features]
-default = ["video", "avif"]
-video = ["av-metrics-decoders", "plotters", "statrs", "num-traits"]
+default = ["avif"]
+video = ["av-metrics-decoders", "plotters", "statrs", "num-traits"]  # requires vapoursynth
 avif = ["image/avif"]  # pure-Rust, no libdav1d dependency
 
 [lints.clippy]

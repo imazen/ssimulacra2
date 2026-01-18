@@ -1,3 +1,164 @@
+//! # fast-ssim2
+//!
+//! Fast SIMD-accelerated implementation of [SSIMULACRA2](https://github.com/cloudinary/ssimulacra2),
+//! a perceptual image quality metric.
+//!
+//! ## Quick Start
+//!
+//! The simplest way to compare two images:
+//!
+//! ```ignore
+//! use fast_ssim2::compute_ssimulacra2;
+//! use imgref::ImgVec;
+//!
+//! // Load your images (8-bit sRGB)
+//! let source: ImgVec<[u8; 3]> = load_image("source.png");
+//! let distorted: ImgVec<[u8; 3]> = load_image("distorted.png");
+//!
+//! let score = compute_ssimulacra2(source.as_ref(), distorted.as_ref())?;
+//! // score: 100 = identical, 90+ = imperceptible, <50 = significant degradation
+//! ```
+//!
+//! ## Score Interpretation
+//!
+//! | Score | Quality |
+//! |-------|---------|
+//! | **100** | Identical (no difference) |
+//! | **90+** | Imperceptible difference |
+//! | **70-90** | Minor, subtle difference |
+//! | **50-70** | Noticeable difference |
+//! | **<50** | Significant degradation |
+//!
+//! ## Supported Input Formats
+//!
+//! ### With `imgref` feature (recommended for most users)
+//!
+//! | Type | Color Space | Notes |
+//! |------|-------------|-------|
+//! | `ImgRef<[u8; 3]>` | sRGB | Standard 8-bit RGB images |
+//! | `ImgRef<[u16; 3]>` | sRGB | 16-bit RGB (HDR workflows) |
+//! | `ImgRef<[f32; 3]>` | **Linear RGB** | Already linearized data |
+//! | `ImgRef<u8>` | sRGB grayscale | Expanded to R=G=B |
+//! | `ImgRef<f32>` | Linear grayscale | Expanded to R=G=B |
+//!
+//! **Convention:** Integer types assume sRGB gamma encoding. Float types assume linear RGB.
+//!
+//! ### Without features (using `yuvxyb` types)
+//!
+//! ```
+//! use fast_ssim2::{compute_ssimulacra2, Rgb, TransferCharacteristic, ColorPrimaries};
+//!
+//! let data: Vec<[f32; 3]> = vec![[0.5, 0.5, 0.5]; 64 * 64];
+//! let source = Rgb::new(data.clone(), 64, 64,
+//!     TransferCharacteristic::SRGB, ColorPrimaries::BT709)?;
+//! let distorted = Rgb::new(data, 64, 64,
+//!     TransferCharacteristic::SRGB, ColorPrimaries::BT709)?;
+//!
+//! let score = compute_ssimulacra2(source, distorted)?;
+//! // compute_ssimulacra2 accepts yuvxyb::Rgb, yuvxyb::LinearRgb, and more
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Batch Comparisons (2x Faster)
+//!
+//! When comparing multiple images against the same reference (e.g., evaluating
+//! different compression levels), precompute the reference data once:
+//!
+//! ```
+//! use fast_ssim2::{Ssimulacra2Reference, Rgb, TransferCharacteristic, ColorPrimaries};
+//!
+//! // Create test data
+//! let data: Vec<[f32; 3]> = vec![[0.5, 0.5, 0.5]; 64 * 64];
+//! let source = Rgb::new(data.clone(), 64, 64,
+//!     TransferCharacteristic::SRGB, ColorPrimaries::BT709)?;
+//!
+//! // Precompute reference data (~50% of the work)
+//! let reference = Ssimulacra2Reference::new(source)?;
+//!
+//! // Compare multiple distorted versions efficiently
+//! let distorted = Rgb::new(data, 64, 64,
+//!     TransferCharacteristic::SRGB, ColorPrimaries::BT709)?;
+//! let score = reference.compare(distorted)?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Custom Input Types
+//!
+//! Implement [`ToLinearRgb`] to support your own image types:
+//!
+//! ```
+//! use fast_ssim2::{ToLinearRgb, LinearRgbImage, srgb_u8_to_linear};
+//!
+//! struct MyImage {
+//!     pixels: Vec<[u8; 3]>,
+//!     width: usize,
+//!     height: usize,
+//! }
+//!
+//! impl ToLinearRgb for MyImage {
+//!     fn to_linear_rgb(&self) -> LinearRgbImage {
+//!         let data: Vec<[f32; 3]> = self.pixels.iter()
+//!             .map(|[r, g, b]| [
+//!                 srgb_u8_to_linear(*r),
+//!                 srgb_u8_to_linear(*g),
+//!                 srgb_u8_to_linear(*b),
+//!             ])
+//!             .collect();
+//!         LinearRgbImage::new(data, self.width, self.height)
+//!     }
+//! }
+//! ```
+//!
+//! Helper functions for sRGB conversion:
+//! - [`srgb_u8_to_linear`] - 8-bit lookup table (fastest)
+//! - [`srgb_u16_to_linear`] - 16-bit conversion
+//! - [`srgb_to_linear`] - General f32 conversion
+//!
+//! ## SIMD Configuration
+//!
+//! By default, the crate uses safe SIMD via the `wide` crate. For maximum
+//! performance on x86_64, enable the `unsafe-simd` feature:
+//!
+//! ```toml
+//! [dependencies]
+//! fast-ssim2 = { version = "0.6", features = ["unsafe-simd"] }
+//! ```
+//!
+//! | Backend | Speed | Platforms |
+//! |---------|-------|-----------|
+//! | `Scalar` | 1.0× (baseline) | All |
+//! | `Simd` (default) | 2.5× | All (via `wide` crate) |
+//! | `UnsafeSimd` | 3.0× | x86_64 with AVX2 |
+//!
+//! To explicitly select a backend:
+//!
+//! ```
+//! use fast_ssim2::{compute_ssimulacra2_with_config, Ssimulacra2Config};
+//!
+//! # let source = fast_ssim2::LinearRgbImage::new(vec![[0.0; 3]; 64], 8, 8);
+//! # let distorted = fast_ssim2::LinearRgbImage::new(vec![[0.0; 3]; 64], 8, 8);
+//! let score = compute_ssimulacra2_with_config(
+//!     source,
+//!     distorted,
+//!     Ssimulacra2Config::scalar(), // or ::simd(), ::unsafe_simd()
+//! )?;
+//! # Ok::<(), fast_ssim2::Ssimulacra2Error>(())
+//! ```
+//!
+//! ## Features
+//!
+//! | Feature | Default | Description |
+//! |---------|---------|-------------|
+//! | `simd` | ✓ | Safe SIMD via `wide` crate |
+//! | `unsafe-simd` | ✓ | x86_64 intrinsics (faster) |
+//! | `imgref` | | Support for `imgref` image types |
+//! | `rayon` | | Parallel computation |
+//!
+//! ## Requirements
+//!
+//! - **Minimum image size:** 8×8 pixels
+//! - **MSRV:** 1.89.0
+
 mod blur;
 mod input;
 mod precompute;
@@ -18,8 +179,8 @@ pub use input::{LinearRgbImage, ToLinearRgb};
 pub use precompute::Ssimulacra2Reference;
 // Re-export commonly used types from yuvxyb for convenience
 pub use yuvxyb::{
-    ColorPrimaries, Frame, LinearRgb, MatrixCoefficients, Pixel, Plane, Rgb, TransferCharacteristic,
-    Yuv, YuvConfig,
+    ColorPrimaries, Frame, LinearRgb, MatrixCoefficients, Pixel, Plane, Rgb,
+    TransferCharacteristic, Yuv, YuvConfig,
 };
 
 // Re-export sRGB conversion functions for users implementing custom input types

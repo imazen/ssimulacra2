@@ -86,7 +86,7 @@ impl TestImageGenerator {
         let mut data = Vec::with_capacity(width * height * 3);
         for y in 0..height {
             for x in 0..width {
-                let val = if ((x / cell_size) + (y / cell_size)) % 2 == 0 {
+                let val = if ((x / cell_size) + (y / cell_size)).is_multiple_of(2) {
                     255
                 } else {
                     0
@@ -120,12 +120,10 @@ impl TestImageGenerator {
                     } else {
                         255
                     }
+                } else if y < height / 2 {
+                    0
                 } else {
-                    if y < height / 2 {
-                        0
-                    } else {
-                        255
-                    }
+                    255
                 };
                 data.extend_from_slice(&[val, val, val]);
             }
@@ -494,7 +492,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("ssimulacra2"));
 
-    if !bin_path.exists() && !which::which(&bin_path).is_ok() {
+    if !bin_path.exists() && which::which(&bin_path).is_err() {
         eprintln!("ERROR: ssimulacra2 binary not found!");
         eprintln!("Set SSIMULACRA2_BIN=/path/to/ssimulacra2");
         eprintln!("Or ensure 'ssimulacra2' is in PATH");

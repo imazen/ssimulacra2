@@ -68,6 +68,13 @@ pub trait ToLinearRgb {
     fn to_linear_rgb(&self) -> LinearRgbImage;
 }
 
+/// Identity implementation for already-converted images.
+impl ToLinearRgb for LinearRgbImage {
+    fn to_linear_rgb(&self) -> LinearRgbImage {
+        self.clone()
+    }
+}
+
 // =============================================================================
 // sRGB conversion functions
 // =============================================================================

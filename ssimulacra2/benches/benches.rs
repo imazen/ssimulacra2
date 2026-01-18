@@ -106,7 +106,7 @@ fn read_image(path: &str) -> ([Vec<f32>; 3], usize, usize) {
 
     // Convert ImageBuffer to [Vec<f32>; 3]
     let mut img_vec = [Vec::new(), Vec::new(), Vec::new()];
-    for (_i, pixel) in img.pixels().enumerate() {
+    for pixel in img.pixels() {
         img_vec[0].push(pixel[0] as f32);
         img_vec[1].push(pixel[1] as f32);
         img_vec[2].push(pixel[2] as f32);
